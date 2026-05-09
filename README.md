@@ -30,3 +30,12 @@ npm run dev
 ```
 
 Then open the local URL printed by Vite.
+
+## Share Online
+
+The app is configured for GitHub Pages. After changes are pushed to `main`, the
+deployment workflow publishes the app at:
+
+```text
+https://simondana.github.io/community-pantry/
+```
