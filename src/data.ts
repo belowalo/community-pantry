@@ -1,3 +1,9 @@
+export type ServiceWindow = {
+  days: number[];
+  start: string;
+  end: string;
+};
+
 export type Resource = {
   id: number;
   name: string;
@@ -5,19 +11,23 @@ export type Resource = {
   neighborhood: string;
   city: string;
   address: string;
-  openNow: boolean;
-  nextWindow: string;
   phone: string;
   fallbackDistanceKm: number;
   tags: string[];
   requirements: string[];
   languages: string[];
   supplies: string[];
+  serviceWindows: ServiceWindow[];
   geo: {
     lat: number;
     lng: number;
   };
 };
+
+const weekday = [1, 2, 3, 4, 5];
+const monWedFri = [1, 3, 5];
+const tueThu = [2, 4];
+const weekend = [6, 0];
 
 export const resources: Resource[] = [
   {
@@ -27,14 +37,13 @@ export const resources: Resource[] = [
     neighborhood: "Sheridan Davis",
     city: "Brampton",
     address: "7899 McLaughlin Rd, Brampton",
-    openNow: true,
-    nextWindow: "Open until 6:00 PM",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 0.8,
     tags: ["student", "groceries", "no-id", "halal", "vegetarian"],
     requirements: ["Student-focused support", "Confirm campus access before visiting"],
     languages: ["English", "Punjabi", "Urdu"],
     supplies: ["Pantry staples", "Rice", "Lentils", "Hygiene kits"],
+    serviceWindows: [{ days: weekday, start: "10:00", end: "18:00" }],
     geo: { lat: 43.7302, lng: -79.7325 },
   },
   {
@@ -44,14 +53,16 @@ export const resources: Resource[] = [
     neighborhood: "Downtown Brampton",
     city: "Brampton",
     address: "156 Main St N, Brampton",
-    openNow: true,
-    nextWindow: "Meal program hours vary by day",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 2.4,
     tags: ["hot-meal", "urgent", "no-id", "wheelchair", "vegetarian"],
     requirements: ["Walk-in services may be available", "Confirm service window before visiting"],
     languages: ["English"],
     supplies: ["Hot meals", "Drop-in support", "Community referrals"],
+    serviceWindows: [
+      { days: weekday, start: "08:30", end: "14:00" },
+      { days: [6], start: "10:00", end: "13:00" },
+    ],
     geo: { lat: 43.6918, lng: -79.7641 },
   },
   {
@@ -61,14 +72,13 @@ export const resources: Resource[] = [
     neighborhood: "East Mississauga",
     city: "Mississauga",
     address: "3121 Universal Dr, Mississauga",
-    openNow: false,
-    nextWindow: "Referral and pickup times vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 4.7,
     tags: ["groceries", "family", "delivery", "vegetarian", "newcomer"],
     requirements: ["Use local intake process", "Confirm closest pickup location"],
     languages: ["English"],
     supplies: ["Groceries", "Fresh food referrals", "Family support"],
+    serviceWindows: [{ days: weekday, start: "09:00", end: "17:00" }],
     geo: { lat: 43.6379, lng: -79.6416 },
   },
   {
@@ -78,14 +88,13 @@ export const resources: Resource[] = [
     neighborhood: "Meadowvale",
     city: "Mississauga",
     address: "3185 Unity Dr, Mississauga",
-    openNow: false,
-    nextWindow: "Program hours vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 7.8,
     tags: ["groceries", "family", "vegetarian", "newcomer"],
     requirements: ["Registration may be required", "Confirm eligibility before visiting"],
     languages: ["English"],
     supplies: ["Groceries", "Fresh produce", "Community referrals"],
+    serviceWindows: [{ days: tueThu, start: "12:00", end: "19:00" }],
     geo: { lat: 43.5787, lng: -79.7575 },
   },
   {
@@ -95,14 +104,13 @@ export const resources: Resource[] = [
     neighborhood: "Etobicoke",
     city: "Toronto",
     address: "191 New Toronto St, Toronto",
-    openNow: false,
-    nextWindow: "Member food bank hours vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 18.1,
     tags: ["groceries", "family", "delivery", "vegetarian", "no-id"],
     requirements: ["Use locator or call ahead", "Bring ID if available, but ask about no-ID options"],
     languages: ["English"],
     supplies: ["Groceries", "Fresh produce", "Member agency referrals"],
+    serviceWindows: [{ days: weekday, start: "08:30", end: "16:30" }],
     geo: { lat: 43.6005, lng: -79.5057 },
   },
   {
@@ -112,14 +120,16 @@ export const resources: Resource[] = [
     neighborhood: "Trinity Bellwoods",
     city: "Toronto",
     address: "797 Dundas St W, Toronto",
-    openNow: true,
-    nextWindow: "Drop-in windows vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 25.5,
     tags: ["groceries", "hot-meal", "urgent", "no-id", "vegetarian"],
     requirements: ["Walk-in support may be available", "Confirm hours before visiting"],
     languages: ["English"],
     supplies: ["Groceries", "Meals", "Clothing and referrals"],
+    serviceWindows: [
+      { days: monWedFri, start: "11:00", end: "15:00" },
+      { days: [4], start: "16:00", end: "19:00" },
+    ],
     geo: { lat: 43.6519, lng: -79.4093 },
   },
   {
@@ -129,14 +139,13 @@ export const resources: Resource[] = [
     neighborhood: "Amesbury",
     city: "Toronto",
     address: "116 Industry St, Toronto",
-    openNow: false,
-    nextWindow: "Network agency hours vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 23.4,
     tags: ["groceries", "family", "newcomer", "vegetarian"],
     requirements: ["Use agency referral or call ahead", "Service area may apply"],
     languages: ["English"],
     supplies: ["Groceries", "Fresh food", "Community referrals"],
+    serviceWindows: [{ days: weekday, start: "09:30", end: "16:00" }],
     geo: { lat: 43.7009, lng: -79.4899 },
   },
   {
@@ -146,14 +155,16 @@ export const resources: Resource[] = [
     neighborhood: "Scarborough",
     city: "Toronto",
     address: "Scarborough, Toronto",
-    openNow: true,
-    nextWindow: "Multiple program windows across Scarborough",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 42.2,
     tags: ["groceries", "family", "halal", "vegetarian", "newcomer"],
     requirements: ["Confirm nearest program location", "Service times vary by site"],
     languages: ["English"],
     supplies: ["Groceries", "Culturally appropriate food", "Prepared meals"],
+    serviceWindows: [
+      { days: weekday, start: "10:00", end: "17:00" },
+      { days: weekend, start: "11:00", end: "14:00" },
+    ],
     geo: { lat: 43.7764, lng: -79.2318 },
   },
   {
@@ -163,14 +174,13 @@ export const resources: Resource[] = [
     neighborhood: "Richmond Hill",
     city: "Richmond Hill",
     address: "55 Newkirk Rd, Richmond Hill",
-    openNow: false,
-    nextWindow: "Pickup hours vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 36.9,
     tags: ["groceries", "family", "newcomer", "vegetarian"],
     requirements: ["Registration may be required", "Confirm catchment area"],
     languages: ["English"],
     supplies: ["Groceries", "Fresh produce", "Household staples"],
+    serviceWindows: [{ days: tueThu, start: "10:00", end: "15:00" }],
     geo: { lat: 43.8752, lng: -79.4232 },
   },
   {
@@ -180,14 +190,13 @@ export const resources: Resource[] = [
     neighborhood: "Concord",
     city: "Vaughan",
     address: "71 Marycroft Ave, Vaughan",
-    openNow: false,
-    nextWindow: "Distribution windows vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 29.6,
     tags: ["groceries", "family", "vegetarian"],
     requirements: ["Call ahead for current pickup process", "Service area may apply"],
     languages: ["English"],
     supplies: ["Groceries", "Family hampers", "Community referrals"],
+    serviceWindows: [{ days: monWedFri, start: "09:00", end: "13:00" }],
     geo: { lat: 43.7856, lng: -79.5617 },
   },
   {
@@ -197,14 +206,16 @@ export const resources: Resource[] = [
     neighborhood: "Davenport",
     city: "Toronto",
     address: "1884 Davenport Rd, Toronto",
-    openNow: true,
-    nextWindow: "Meal and drop-in programs vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 27.5,
     tags: ["hot-meal", "urgent", "no-id", "vegetarian"],
     requirements: ["Drop-in programs may be available", "Confirm schedule before visiting"],
     languages: ["English"],
     supplies: ["Meals", "Community kitchen", "Food access referrals"],
+    serviceWindows: [
+      { days: weekday, start: "09:00", end: "15:00" },
+      { days: [2, 4], start: "16:00", end: "18:30" },
+    ],
     geo: { lat: 43.6716, lng: -79.4521 },
   },
   {
@@ -214,14 +225,13 @@ export const resources: Resource[] = [
     neighborhood: "Oshawa",
     city: "Durham Region",
     address: "371 Marwood Dr, Oshawa",
-    openNow: false,
-    nextWindow: "Partner agency hours vary",
     phone: "Call 211 for current intake details",
     fallbackDistanceKm: 71.2,
     tags: ["groceries", "family", "delivery", "vegetarian"],
     requirements: ["Use partner agency intake", "Confirm nearest Durham pickup site"],
     languages: ["English"],
     supplies: ["Groceries", "Regional partner referrals", "Family hampers"],
+    serviceWindows: [{ days: weekday, start: "08:00", end: "16:00" }],
     geo: { lat: 43.8792, lng: -78.8795 },
   },
 ];

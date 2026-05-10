@@ -15,10 +15,12 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
 ## MVP Features
 
 - Plain-language need search.
-- Sentence parsing that detects needs like halal, no ID, urgent, student,
-  family, delivery, and baby supplies from the Situation box.
+- Combined Situation and Needs panel where sentence parsing checks matching
+  needs like halal, no ID, urgent, student, family, delivery, and baby supplies.
 - Real distance calculation from a typed address, landmark, postal code, or
   browser GPS permission.
+- Current-time open/closed status calculated from each resource's service
+  windows.
 - OpenStreetMap-powered GTA map with ranked resource markers.
 - Food support filters for urgent needs, dietary needs, no-ID access, students,
   families, baby supplies, and delivery.

@@ -1,12 +1,9 @@
 import {
-  Bell,
   CheckCircle2,
   Clock3,
-  Filter,
   HeartHandshake,
   LocateFixed,
   MapPin,
-  MessageCircle,
   Search,
   ShieldCheck,
   Sparkles,
@@ -15,7 +12,7 @@ import {
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { needOptions, Resource, resources } from "./data";
+import { needOptions, Resource, resources, ServiceWindow } from "./data";
 
 type UserLocation = {
   label: string;
@@ -44,11 +41,95 @@ const queryPatterns: Record<string, string[]> = {
 };
 
 function detectedNeedIds(query: string) {
-  const normalizedQuery = query.toLowerCase().replace(/[’']/g, "");
+  const normalizedQuery = query.toLowerCase().replace(/['\u2019]/g, "");
 
   return Object.entries(queryPatterns)
     .filter(([, patterns]) => patterns.some((pattern) => normalizedQuery.includes(pattern)))
     .map(([id]) => id);
+}
+
+function minutesFromTime(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+
+  return hours * 60 + minutes;
+}
+
+function formatTime(time: string) {
+  const [rawHours, minutes] = time.split(":").map(Number);
+  const period = rawHours >= 12 ? "PM" : "AM";
+  const hours = rawHours % 12 || 12;
+
+  return `${hours}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+function formatClock(date: Date) {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function dayLabel(day: number) {
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day];
+}
+
+function windowsForDay(serviceWindows: ServiceWindow[], day: number) {
+  return serviceWindows
+    .filter((window) => window.days.includes(day))
+    .sort((a, b) => minutesFromTime(a.start) - minutesFromTime(b.start));
+}
+
+function formatWindows(windows: ServiceWindow[]) {
+  if (!windows.length) {
+    return "No service window today";
+  }
+
+  return windows.map((window) => `${formatTime(window.start)}-${formatTime(window.end)}`).join(", ");
+}
+
+function serviceStatus(resource: Resource, now: Date) {
+  const today = now.getDay();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const todaysWindows = windowsForDay(resource.serviceWindows, today);
+  const openWindow = todaysWindows.find(
+    (window) =>
+      currentMinutes >= minutesFromTime(window.start) &&
+      currentMinutes < minutesFromTime(window.end),
+  );
+
+  if (openWindow) {
+    return {
+      isOpen: true,
+      label: `Open now until ${formatTime(openWindow.end)}`,
+      todayText: `Today: ${formatWindows(todaysWindows)}`,
+    };
+  }
+
+  const laterToday = todaysWindows.find((window) => currentMinutes < minutesFromTime(window.start));
+
+  if (laterToday) {
+    return {
+      isOpen: false,
+      label: `Opens today at ${formatTime(laterToday.start)}`,
+      todayText: `Today: ${formatWindows(todaysWindows)}`,
+    };
+  }
+
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const day = (today + offset) % 7;
+    const nextWindows = windowsForDay(resource.serviceWindows, day);
+
+    if (nextWindows.length) {
+      return {
+        isOpen: false,
+        label: `Opens ${dayLabel(day)} at ${formatTime(nextWindows[0].start)}`,
+        todayText: `Today: ${formatWindows(todaysWindows)}`,
+      };
+    }
+  }
+
+  return {
+    isOpen: false,
+    label: "Hours unavailable",
+    todayText: "No published service windows",
+  };
 }
 
 function distanceKm(from: UserLocation, to: Resource["geo"]) {
@@ -97,6 +178,7 @@ function scoreResource(
   effectiveNeeds: string[],
   query: string,
   calculatedDistanceKm: number,
+  isOpen: boolean,
 ) {
   const normalizedQuery = query.toLowerCase();
   const searchable = [
@@ -120,7 +202,7 @@ function scoreResource(
     .split(/\s+/)
     .filter((word) => word.length > 2)
     .reduce((score, word) => score + (searchable.includes(word) ? 5 : 0), 0);
-  const openScore = resource.openNow ? 10 : 0;
+  const openScore = isOpen ? 10 : 0;
   const distanceScore = Math.max(0, 18 - calculatedDistanceKm * 1.8);
 
   return Math.round(needScore + queryScore + openScore + distanceScore);
@@ -133,9 +215,7 @@ function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
     .filter(Boolean);
 
   if (matched.length === 0) {
-    return resource.openNow
-      ? "Nearby and open now, with broad walk-in support."
-      : "Nearby option with upcoming availability.";
+    return "Nearby option with relevant food access support.";
   }
 
   return `Matches ${matched.slice(0, 3).join(", ")}${matched.length > 3 ? " and more" : ""}.`;
@@ -153,6 +233,7 @@ export default function App() {
   });
   const [locationStatus, setLocationStatus] = useState("Distances are calculated from this location.");
   const [isLocating, setIsLocating] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -163,20 +244,34 @@ export default function App() {
     [detectedNeeds, selectedNeeds],
   );
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   const rankedResources = useMemo(() => {
     return resources
-      .filter((resource) => (onlyOpen ? resource.openNow : true))
       .map((resource) => {
         const calculatedDistanceKm = distanceKm(userLocation, resource.geo);
+        const status = serviceStatus(resource, now);
 
         return {
           resource,
           calculatedDistanceKm,
-          score: scoreResource(resource, effectiveNeeds, query, calculatedDistanceKm),
+          status,
+          score: scoreResource(
+            resource,
+            effectiveNeeds,
+            query,
+            calculatedDistanceKm,
+            status.isOpen,
+          ),
         };
       })
+      .filter(({ status }) => (onlyOpen ? status.isOpen : true))
       .sort((a, b) => b.score - a.score || a.calculatedDistanceKm - b.calculatedDistanceKm);
-  }, [effectiveNeeds, onlyOpen, query, userLocation]);
+  }, [effectiveNeeds, now, onlyOpen, query, userLocation]);
 
   const bestMatch = rankedResources[0]?.resource;
 
@@ -238,13 +333,13 @@ export default function App() {
         .bindPopup(
           `<strong>${resource.name}</strong><br>${resource.city}<br>${calculatedDistanceKm.toFixed(
             1,
-          )} km away`,
+          )} km away<br>${serviceStatus(resource, now).label}`,
         )
         .addTo(markerLayerRef.current);
     });
 
     mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 11 });
-  }, [rankedResources, userLocation]);
+  }, [now, rankedResources, userLocation]);
 
   function toggleNeed(id: string) {
     setSelectedNeeds((current) =>
@@ -331,24 +426,40 @@ export default function App() {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Example: I need halal groceries today and I do not have ID."
           />
-          <div className="detected-needs" aria-label="Detected needs from situation">
-            <span>Detected</span>
-            {detectedNeeds.length ? (
-              detectedNeeds.map((need) => (
-                <strong key={need}>
-                  {needOptions.find((option) => option.id === need)?.label ?? need}
-                </strong>
-              ))
-            ) : (
-              <em>Type a sentence to auto-detect needs</em>
-            )}
-          </div>
           <div className="examples" aria-label="Example searches">
             {examples.map((example) => (
               <button key={example} type="button" onClick={() => setQuery(example)}>
                 {example}
               </button>
             ))}
+          </div>
+          <div className="need-header">
+            <h2>Needs</h2>
+            <span>
+              {detectedNeeds.length
+                ? `${detectedNeeds.length} detected from your sentence`
+                : "Type a sentence or choose manually"}
+            </span>
+          </div>
+          <div className="need-grid">
+            {needOptions.map((option) => {
+              const isDetected = detectedNeeds.includes(option.id);
+              const isSelected = selectedNeeds.includes(option.id);
+              const isActive = isSelected || isDetected;
+
+              return (
+                <button
+                  className={isActive ? "need active" : "need"}
+                  key={option.id}
+                  type="button"
+                  onClick={() => toggleNeed(option.id)}
+                >
+                  {isActive && <CheckCircle2 size={14} aria-hidden="true" />}
+                  {option.label}
+                  {isDetected && <span>auto</span>}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -383,24 +494,7 @@ export default function App() {
         </section>
 
         <section className="panel">
-          <div className="section-title compact">
-            <Filter size={18} aria-hidden="true" />
-            <h2>Needs</h2>
-          </div>
-          <div className="need-grid">
-            {needOptions.map((option) => (
-              <button
-                className={selectedNeeds.includes(option.id) ? "need active" : "need"}
-                key={option.id}
-                type="button"
-                onClick={() => toggleNeed(option.id)}
-              >
-                {selectedNeeds.includes(option.id) && <CheckCircle2 size={14} aria-hidden="true" />}
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <label className="toggle">
+          <label className="toggle no-margin">
             <input
               checked={onlyOpen}
               onChange={(event) => setOnlyOpen(event.target.checked)}
@@ -431,11 +525,8 @@ export default function App() {
           <div>
             <p className="eyebrow">From {userLocation.label}</p>
             <h2>{rankedResources.length} matched support options</h2>
+            <p className="time-readout">Open status checked at {formatClock(now)}</p>
           </div>
-          <button className="notify-button" type="button">
-            <Bell size={18} aria-hidden="true" />
-            Notify me
-          </button>
         </header>
 
         <div className="content-grid">
@@ -447,23 +538,16 @@ export default function App() {
               </div>
             </div>
             <div className="map-canvas" ref={mapElementRef} />
-            <div className="ai-note">
-              <MessageCircle size={18} aria-hidden="true" />
-              <p>
-                The sentence box now detects needs and changes ranking. watsonx can replace this
-                keyword parser with stronger natural-language eligibility extraction.
-              </p>
-            </div>
           </section>
 
           <section className="results" aria-label="Matched resources">
-            {rankedResources.map(({ resource, score, calculatedDistanceKm }, index) => (
+            {rankedResources.map(({ resource, score, calculatedDistanceKm, status }, index) => (
               <article className={index === 0 ? "resource-card featured" : "resource-card"} key={resource.id}>
                 <div className="resource-topline">
                   <span className="type-pill">{resource.type}</span>
-                  <span className={resource.openNow ? "status open" : "status"}>
+                  <span className={status.isOpen ? "status open" : "status"}>
                     <Clock3 size={14} aria-hidden="true" />
-                    {resource.openNow ? "Open now" : "Closed"}
+                    {status.isOpen ? "Open now" : "Closed"}
                   </span>
                 </div>
                 <div className="resource-heading">
@@ -482,7 +566,11 @@ export default function App() {
                 </div>
                 <div className="detail-row">
                   <Clock3 size={16} aria-hidden="true" />
-                  <span>{resource.nextWindow}</span>
+                  <span>{status.label}</span>
+                </div>
+                <div className="detail-row service-window">
+                  <Clock3 size={16} aria-hidden="true" />
+                  <span>{status.todayText}</span>
                 </div>
                 <div className="tag-row">
                   {resource.supplies.slice(0, 4).map((supply) => (
