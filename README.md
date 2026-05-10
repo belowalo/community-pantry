@@ -15,6 +15,8 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
 ## MVP Features
 
 - Plain-language need search.
+- Real distance calculation from a typed address, landmark, postal code, or
+  browser GPS permission.
 - Food support filters for urgent needs, dietary needs, no-ID access, students,
   families, baby supplies, and delivery.
 - Ranked nearby resources with open-now status, requirements, supplies, and

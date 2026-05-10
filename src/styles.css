@@ -141,6 +141,64 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(240, 193, 95, 0.24);
 }
 
+.location-form {
+  display: grid;
+  gap: 10px;
+}
+
+.location-form input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #182620;
+  outline: none;
+}
+
+.location-form input:focus {
+  border-color: #f0c15f;
+  box-shadow: 0 0 0 3px rgba(240, 193, 95, 0.24);
+}
+
+.location-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.location-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: #f0c15f;
+  color: #17352d;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.location-actions button + button {
+  background: rgba(255, 255, 255, 0.14);
+  color: #f7f9ef;
+}
+
+.location-actions button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.location-status {
+  margin-top: 10px;
+  color: #d7e6df;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
 .examples {
   display: grid;
   gap: 8px;
@@ -536,7 +594,8 @@ textarea:focus {
   }
 
   .need-grid,
-  .trust-strip {
+  .trust-strip,
+  .location-actions {
     grid-template-columns: 1fr;
   }
 

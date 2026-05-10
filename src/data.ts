@@ -8,10 +8,15 @@ export type Resource = {
   openNow: boolean;
   nextWindow: string;
   phone: string;
+  fallbackDistanceKm: number;
   tags: string[];
   requirements: string[];
   languages: string[];
   supplies: string[];
+  geo: {
+    lat: number;
+    lng: number;
+  };
   coordinates: {
     x: number;
     y: number;
@@ -29,10 +34,12 @@ export const resources: Resource[] = [
     openNow: true,
     nextWindow: "Open until 6:00 PM",
     phone: "(905) 555-0144",
+    fallbackDistanceKm: 0.8,
     tags: ["student", "groceries", "no-id", "halal", "vegetarian"],
     requirements: ["Student card preferred", "No proof of income required"],
     languages: ["English", "Punjabi", "Urdu"],
     supplies: ["Pantry staples", "Rice", "Lentils", "Hygiene kits"],
+    geo: { lat: 43.7302, lng: -79.7325 },
     coordinates: { x: 61, y: 35 },
   },
   {
@@ -45,10 +52,12 @@ export const resources: Resource[] = [
     openNow: true,
     nextWindow: "Dinner served 4:30 PM - 7:00 PM",
     phone: "(905) 555-0198",
+    fallbackDistanceKm: 2.4,
     tags: ["hot-meal", "urgent", "no-id", "wheelchair", "vegetarian"],
     requirements: ["Walk-ins welcome", "No appointment needed"],
     languages: ["English", "Spanish", "Hindi"],
     supplies: ["Hot dinners", "Soup", "Takeaway meals"],
+    geo: { lat: 43.6869, lng: -79.7586 },
     coordinates: { x: 46, y: 53 },
   },
   {
@@ -61,10 +70,12 @@ export const resources: Resource[] = [
     openNow: false,
     nextWindow: "Opens tomorrow at 9:00 AM",
     phone: "(905) 555-0108",
+    fallbackDistanceKm: 3.1,
     tags: ["groceries", "baby", "family", "delivery", "halal"],
     requirements: ["Postal code", "One visit every 14 days"],
     languages: ["English", "Punjabi", "Arabic"],
     supplies: ["Fresh produce", "Baby formula", "Canned goods", "Diapers"],
+    geo: { lat: 43.6664, lng: -79.7428 },
     coordinates: { x: 69, y: 64 },
   },
   {
@@ -77,10 +88,12 @@ export const resources: Resource[] = [
     openNow: true,
     nextWindow: "Open 24 hours",
     phone: "(905) 555-0172",
+    fallbackDistanceKm: 1.6,
     tags: ["urgent", "no-id", "groceries", "24-hour"],
     requirements: ["Take what you need", "No registration"],
     languages: ["English"],
     supplies: ["Bread", "Produce", "Prepared meals", "Snacks"],
+    geo: { lat: 43.6606, lng: -79.7385 },
     coordinates: { x: 56, y: 70 },
   },
   {
@@ -93,10 +106,12 @@ export const resources: Resource[] = [
     openNow: false,
     nextWindow: "Opens Monday at 10:00 AM",
     phone: "(905) 555-0116",
+    fallbackDistanceKm: 4.7,
     tags: ["newcomer", "family", "groceries", "delivery", "vegetarian"],
     requirements: ["Book by phone", "Newcomer services available"],
     languages: ["English", "French", "Arabic", "Urdu"],
     supplies: ["Settlement referrals", "Groceries", "Transit tokens"],
+    geo: { lat: 43.6712, lng: -79.6529 },
     coordinates: { x: 31, y: 74 },
   },
   {
@@ -109,10 +124,12 @@ export const resources: Resource[] = [
     openNow: true,
     nextWindow: "Open until 8:00 PM",
     phone: "(905) 555-0129",
+    fallbackDistanceKm: 5.2,
     tags: ["halal", "groceries", "family", "no-id"],
     requirements: ["Call ahead for large families", "No income papers for first visit"],
     languages: ["English", "Urdu", "Arabic", "Somali"],
     supplies: ["Halal meat vouchers", "Rice", "Fresh produce", "Infant items"],
+    geo: { lat: 43.7286, lng: -79.7974 },
     coordinates: { x: 74, y: 24 },
   },
 ];
