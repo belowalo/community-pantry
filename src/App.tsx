@@ -22,6 +22,7 @@ type UserLocation = {
   label: string;
   lat: number;
   lng: number;
+  approximate?: boolean;
 };
 
 type RankedResource = {
@@ -171,31 +172,90 @@ function distanceKm(from: UserLocation, to: Resource["geo"]) {
 }
 
 async function geocodeLocation(searchText: string): Promise<UserLocation> {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ca&q=${encodeURIComponent(
-      searchText,
-    )}`,
+  const cleanedSearch = searchText.trim().replace(/\s+/g, " ");
+  const fallbackCities = [
+    "",
+    "Ontario",
+    "Milton Ontario",
+    "Brampton Ontario",
+    "Mississauga Ontario",
+    "Toronto Ontario",
+    "Scarborough Ontario",
+    "Etobicoke Ontario",
+    "North York Ontario",
+    "Vaughan Ontario",
+    "Richmond Hill Ontario",
+    "Markham Ontario",
+    "Oakville Ontario",
+    "Burlington Ontario",
+    "Oshawa Ontario",
+  ];
+  const streetWithoutNumber = cleanedSearch.replace(/^\d+\s+/, "");
+  const queries = Array.from(
+    new Set([
+      cleanedSearch,
+      ...fallbackCities.filter(Boolean).map((suffix) => `${cleanedSearch}, ${suffix}`),
+      ...(streetWithoutNumber !== cleanedSearch
+        ? [
+            streetWithoutNumber,
+            ...fallbackCities.filter(Boolean).map((suffix) => `${streetWithoutNumber}, ${suffix}`),
+          ]
+        : []),
+    ]),
   );
 
-  if (!response.ok) {
-    throw new Error("Location lookup failed. Try a postal code or a more specific address.");
-  }
-
-  const results = (await response.json()) as Array<{
+  type NominatimResult = {
     display_name: string;
     lat: string;
     lon: string;
-  }>;
+    addresstype?: string;
+    class?: string;
+    type?: string;
+  };
 
-  if (!results.length) {
-    throw new Error("No location found. Try adding the city or postal code.");
+  for (const query of queries) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 7000);
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=3&countrycodes=ca&addressdetails=1&q=${encodeURIComponent(
+          query,
+        )}`,
+        { signal: controller.signal },
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const results = (await response.json()) as NominatimResult[];
+      const result = results.find((candidate) => {
+        const lat = Number(candidate.lat);
+        const lng = Number(candidate.lon);
+
+        return Number.isFinite(lat) && Number.isFinite(lng);
+      });
+
+      if (result) {
+        const approximate =
+          result.addresstype === "road" || result.class === "highway" || result.type === "residential";
+
+        return {
+          label: result.display_name.split(",").slice(0, 4).join(","),
+          lat: Number(result.lat),
+          lng: Number(result.lon),
+          approximate,
+        };
+      }
+    } catch {
+      continue;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
-  return {
-    label: results[0].display_name.split(",").slice(0, 3).join(","),
-    lat: Number(results[0].lat),
-    lng: Number(results[0].lon),
-  };
+  throw new Error("No GTA/Ontario match found. Try adding the city, for example: 516 Laking Terrace, Milton.");
 }
 
 function scoreResource(
@@ -257,6 +317,7 @@ export default function App() {
     lng: -79.7325,
   });
   const [locationStatus, setLocationStatus] = useState("Distances are calculated from this location.");
+  const [locationStatusTone, setLocationStatusTone] = useState<"neutral" | "error">("neutral");
   const [isLocating, setIsLocating] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [selectedResourceId, setSelectedResourceId] = useState<number | null>(null);
@@ -432,13 +493,19 @@ export default function App() {
     }
 
     setIsLocating(true);
+    setLocationStatusTone("neutral");
     setLocationStatus("Finding that location...");
 
     try {
       const nextLocation = await geocodeLocation(locationInput);
       setUserLocation(nextLocation);
-      setLocationStatus(`Using ${nextLocation.label}.`);
+      setLocationStatus(
+        nextLocation.approximate
+          ? `Using approximate street match: ${nextLocation.label}.`
+          : `Using ${nextLocation.label}.`,
+      );
     } catch (error) {
+      setLocationStatusTone("error");
       setLocationStatus(error instanceof Error ? error.message : "Could not find that location.");
     } finally {
       setIsLocating(false);
@@ -452,6 +519,7 @@ export default function App() {
     }
 
     setIsLocating(true);
+    setLocationStatusTone("neutral");
     setLocationStatus("Waiting for browser location permission...");
 
     navigator.geolocation.getCurrentPosition(
@@ -462,12 +530,14 @@ export default function App() {
           lng: position.coords.longitude,
         };
         setUserLocation(nextLocation);
+        setLocationStatusTone("neutral");
         setLocationStatus(
           `Using your current location with ${Math.round(position.coords.accuracy)}m accuracy.`,
         );
         setIsLocating(false);
       },
       () => {
+        setLocationStatusTone("error");
         setLocationStatus("Location permission was blocked. Type an address or postal code instead.");
         setIsLocating(false);
       },
@@ -566,7 +636,9 @@ export default function App() {
               </button>
             </div>
           </form>
-          <p className="location-status">{locationStatus}</p>
+          <p className={locationStatusTone === "error" ? "location-status error" : "location-status"}>
+            {locationStatus}
+          </p>
         </section>
 
         <section className="panel">
