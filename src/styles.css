@@ -535,6 +535,25 @@ textarea:focus {
   box-shadow: 0 18px 44px rgba(214, 80, 63, 0.16);
 }
 
+.empty-state {
+  display: grid;
+  gap: 8px;
+  border: 1px dashed #cdbf9c;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fffdf4;
+  color: #33463b;
+}
+
+.empty-state h3 {
+  font-size: 1rem;
+}
+
+.empty-state p {
+  color: #607166;
+  line-height: 1.45;
+}
+
 .resource-topline,
 .resource-heading,
 .detail-row,

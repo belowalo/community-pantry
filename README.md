@@ -9,9 +9,8 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
   SDG 11 Sustainable Cities.
 - Best Startup Potential: designed for schools, municipalities, and nonprofits
   that need smarter intake and referral tools.
-- Best Use of IBM Tech: the current MVP has a local sentence parser, and the
-  matching layer is structured so watsonx can replace that parser for stronger
-  eligibility extraction.
+- Best Use of IBM Tech: the matching layer is structured so IBM Cloud or watsonx
+  services can replace the local parsing and data-ingest pieces later.
 
 ## MVP Features
 
@@ -24,13 +23,15 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
   windows.
 - Clickable resource details with contact info, directions, requirements, and
   local saved resources.
-- OpenStreetMap-powered GTA map with ranked resource markers.
+- OpenStreetMap-powered Canada map with ranked resource markers.
 - Food support filters for urgent needs, dietary needs, no-ID access, students,
   families, baby supplies, and delivery.
 - Ranked nearby resources with open-now status, requirements, supplies, and
   contact actions.
-- Expanded GTA seed directory across Brampton, Mississauga, Toronto, York, and
-  Durham.
+- Verified Canadian seed directory across Ontario, Quebec, Western Canada,
+  Atlantic Canada, and the territories, merged with live map listings near the
+  user's address.
+- Installable PWA support with local saves available inside the installed app.
 
 ## Run Locally
 
@@ -47,5 +48,5 @@ The app is configured for GitHub Pages. After changes are pushed to `main`, the
 deployment workflow publishes the app at:
 
 ```text
-https://simondana.github.io/community-pantry/
+https://belowalo.github.io/community-pantry/
 ```

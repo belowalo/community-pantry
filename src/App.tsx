@@ -66,6 +66,193 @@ const examples = [
   "Family needs baby formula and delivery",
 ];
 
+type LocalGeocodeEntry = UserLocation & {
+  cityKeywords: string[];
+  postalPrefixes?: string[];
+  preciseKeywords?: string[];
+};
+
+const localGeocodeEntries: LocalGeocodeEntry[] = [
+  {
+    label: "Laking Terrace, Milton, Halton Region",
+    lat: 43.5229676,
+    lng: -79.8441609,
+    approximate: true,
+    postalPrefixes: ["L9T"],
+    preciseKeywords: ["laking terrace"],
+    cityKeywords: ["milton"],
+  },
+  {
+    label: "Sheridan Davis Campus, Brampton",
+    lat: 43.7302,
+    lng: -79.7325,
+    approximate: true,
+    postalPrefixes: ["L6Y"],
+    preciseKeywords: ["sheridan davis"],
+    cityKeywords: ["brampton"],
+  },
+  {
+    label: "Burnaby, Metro Vancouver",
+    lat: 49.2493824,
+    lng: -122.9220659,
+    approximate: true,
+    postalPrefixes: ["V5A"],
+    cityKeywords: ["burnaby", "vancouver"],
+  },
+  {
+    label: "Calgary, Alberta",
+    lat: 51.0097033,
+    lng: -114.035993,
+    approximate: true,
+    postalPrefixes: ["T2H"],
+    cityKeywords: ["calgary"],
+  },
+  {
+    label: "Edmonton, Alberta",
+    lat: 53.566535,
+    lng: -113.5302222,
+    approximate: true,
+    postalPrefixes: ["T5G"],
+    cityKeywords: ["edmonton"],
+  },
+  {
+    label: "Saskatoon, Saskatchewan",
+    lat: 52.1274399,
+    lng: -106.6730143,
+    approximate: true,
+    postalPrefixes: ["S7M"],
+    cityKeywords: ["saskatoon"],
+  },
+  {
+    label: "Regina, Saskatchewan",
+    lat: 50.4713771,
+    lng: -104.5937209,
+    approximate: true,
+    postalPrefixes: ["S4R"],
+    cityKeywords: ["regina"],
+  },
+  {
+    label: "Winnipeg, Manitoba",
+    lat: 49.9073135,
+    lng: -97.1740053,
+    approximate: true,
+    postalPrefixes: ["R3E"],
+    cityKeywords: ["winnipeg"],
+  },
+  {
+    label: "Ottawa, Ontario",
+    lat: 45.4060023,
+    lng: -75.6171735,
+    approximate: true,
+    postalPrefixes: ["K1B"],
+    cityKeywords: ["ottawa"],
+  },
+  {
+    label: "Montreal, Quebec",
+    lat: 45.4810814,
+    lng: -73.6945069,
+    approximate: true,
+    postalPrefixes: ["H4T"],
+    cityKeywords: ["montreal"],
+  },
+  {
+    label: "Quebec City, Quebec",
+    lat: 46.7865419,
+    lng: -71.3141993,
+    approximate: true,
+    postalPrefixes: ["G1X"],
+    cityKeywords: ["quebec city"],
+  },
+  {
+    label: "Dartmouth, Nova Scotia",
+    lat: 44.7037091,
+    lng: -63.5997121,
+    approximate: true,
+    postalPrefixes: ["B3B"],
+    cityKeywords: ["dartmouth", "halifax"],
+  },
+  {
+    label: "Fredericton, New Brunswick",
+    lat: 45.9356615,
+    lng: -66.6094702,
+    approximate: true,
+    postalPrefixes: ["E3A"],
+    cityKeywords: ["fredericton"],
+  },
+  {
+    label: "Charlottetown, Prince Edward Island",
+    lat: 46.2448535,
+    lng: -63.1215351,
+    approximate: true,
+    postalPrefixes: ["C1A"],
+    cityKeywords: ["charlottetown"],
+  },
+  {
+    label: "St. John's, Newfoundland and Labrador",
+    lat: 47.5594079,
+    lng: -52.772657,
+    approximate: true,
+    postalPrefixes: ["A1B"],
+    cityKeywords: ["st johns", "st john's"],
+  },
+  {
+    label: "Whitehorse, Yukon",
+    lat: 60.7223998,
+    lng: -135.0610475,
+    approximate: true,
+    postalPrefixes: ["Y1A"],
+    cityKeywords: ["whitehorse"],
+  },
+  {
+    label: "Yellowknife, Northwest Territories",
+    lat: 62.454954,
+    lng: -114.3731066,
+    approximate: true,
+    postalPrefixes: ["X1A"],
+    cityKeywords: ["yellowknife"],
+  },
+  {
+    label: "Iqaluit, Nunavut",
+    lat: 63.7479425,
+    lng: -68.5171677,
+    approximate: true,
+    postalPrefixes: ["X0A"],
+    cityKeywords: ["iqaluit"],
+  },
+  {
+    label: "Kelowna, British Columbia",
+    lat: 49.8835858,
+    lng: -119.4346914,
+    approximate: true,
+    postalPrefixes: ["V1X"],
+    cityKeywords: ["kelowna"],
+  },
+  {
+    label: "London, Ontario",
+    lat: 42.961589,
+    lng: -81.2165712,
+    approximate: true,
+    postalPrefixes: ["N5Z"],
+    cityKeywords: ["london"],
+  },
+  {
+    label: "Kitchener, Waterloo Region",
+    lat: 43.4243671,
+    lng: -80.4781783,
+    approximate: true,
+    postalPrefixes: ["N2E"],
+    cityKeywords: ["kitchener", "waterloo"],
+  },
+  {
+    label: "Guelph, Ontario",
+    lat: 43.5368528,
+    lng: -80.2625138,
+    approximate: true,
+    postalPrefixes: ["N1H"],
+    cityKeywords: ["guelph"],
+  },
+];
+
 const queryPatterns: Record<string, string[]> = {
   groceries: ["grocery", "groceries", "food bank", "pantry", "staples", "canned"],
   "hot-meal": ["hot meal", "meal", "dinner", "lunch", "soup", "eat today"],
@@ -87,6 +274,43 @@ function normalizeResourceName(name: string) {
     .replace(/\b(inc|the|food bank|foodbank|pantry|program|centre|center|location|site)\b/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/['\u2019]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function localGeocodeLocation(searchText: string, allowCityMatch = false): UserLocation | null {
+  const normalized = normalizeSearchText(searchText);
+  const postalPrefix = searchText.toUpperCase().replace(/\s+/g, "").match(/^([A-Z]\d[A-Z])/)?.[1];
+
+  const postalMatch = localGeocodeEntries.find((entry) => entry.postalPrefixes?.includes(postalPrefix ?? ""));
+
+  if (postalMatch) {
+    return postalMatch;
+  }
+
+  const preciseMatch = localGeocodeEntries.find((entry) =>
+    entry.preciseKeywords?.some((keyword) => normalized.includes(normalizeSearchText(keyword))),
+  );
+
+  if (preciseMatch) {
+    return preciseMatch;
+  }
+
+  if (!allowCityMatch) {
+    return null;
+  }
+
+  return (
+    localGeocodeEntries.find((entry) =>
+      entry.cityKeywords.some((keyword) => normalized.includes(normalizeSearchText(keyword))),
+    ) ?? null
+  );
 }
 
 function resourceDedupKey(resource: Resource) {
@@ -207,6 +431,8 @@ function tagsFromOsm(type: Resource["type"], tags: Record<string, string>) {
   if (text.includes("newcomer") || text.includes("settlement")) derived.add("newcomer");
   if (text.includes("student") || text.includes("campus")) derived.add("student");
   if (text.includes("no id") || text.includes("drop")) derived.add("no-id");
+  if (text.includes("salvation army")) derived.add("family");
+  if (text.includes("food for life") || text.includes("community fridge")) derived.add("vegetarian");
 
   return Array.from(derived);
 }
@@ -276,7 +502,7 @@ function boundingBoxForRadius(center: UserLocation, radiusMeters: number) {
 }
 
 async function fetchCanadianOpenStreetMapResources(center: UserLocation) {
-  const searchRadii = [50000, 150000, 300000, 750000];
+  const searchRadii = [15000, 50000, 150000];
 
   for (const radius of searchRadii) {
     const boundingBox = boundingBoxForRadius(center, radius);
@@ -292,36 +518,52 @@ async function fetchCanadianOpenStreetMapResources(center: UserLocation) {
       node["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${boundingBox});
       way["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${boundingBox});
       relation["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${boundingBox});
+      node["name"~"[Ff]ood [Bb]ank|[Ff]ood [Pp]antry|[Cc]ommunity [Ff]ridge|[Ss]oup [Kk]itchen|[Ss]alvation [Aa]rmy|[Ff]ood [Ff]or [Ll]ife|[Nn]o [Oo]ne [Gg]oes [Hh]ungry"](${boundingBox});
+      way["name"~"[Ff]ood [Bb]ank|[Ff]ood [Pp]antry|[Cc]ommunity [Ff]ridge|[Ss]oup [Kk]itchen|[Ss]alvation [Aa]rmy|[Ff]ood [Ff]or [Ll]ife|[Nn]o [Oo]ne [Gg]oes [Hh]ungry"](${boundingBox});
+      relation["name"~"[Ff]ood [Bb]ank|[Ff]ood [Pp]antry|[Cc]ommunity [Ff]ridge|[Ss]oup [Kk]itchen|[Ss]alvation [Aa]rmy|[Ff]ood [Ff]or [Ll]ife|[Nn]o [Oo]ne [Gg]oes [Hh]ungry"](${boundingBox});
+      node["operator"~"[Ff]ood [Bb]ank|[Ff]ood [Ff]or [Ll]ife|[Ss]alvation [Aa]rmy"](${boundingBox});
+      way["operator"~"[Ff]ood [Bb]ank|[Ff]ood [Ff]or [Ll]ife|[Ss]alvation [Aa]rmy"](${boundingBox});
+      relation["operator"~"[Ff]ood [Bb]ank|[Ff]ood [Ff]or [Ll]ife|[Ss]alvation [Aa]rmy"](${boundingBox});
     );
     out center tags;
   `;
-    const response = await fetch("https://overpass-api.de/api/interpreter", {
-      body: `data=${encodeURIComponent(query)}`,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      method: "POST",
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
 
-    if (!response.ok) {
+    try {
+      const response = await fetch("https://overpass-api.de/api/interpreter", {
+        body: `data=${encodeURIComponent(query)}`,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        method: "POST",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const payload = (await response.json()) as { elements?: OverpassElement[] };
+      const results = curateResourcePool(
+        (payload.elements ?? [])
+          .filter((element) => {
+            const country = element.tags?.["addr:country"];
+
+            return !country || country.toUpperCase() === "CA";
+          })
+          .map(mapOverpassElement)
+          .filter((resource): resource is Resource => Boolean(resource)),
+      );
+
+      if (results.length >= 8 || radius === searchRadii[searchRadii.length - 1]) {
+        return { radiusKm: radius / 1000, resources: results };
+      }
+    } catch {
       continue;
-    }
-
-    const payload = (await response.json()) as { elements?: OverpassElement[] };
-    const results = curateResourcePool(
-      (payload.elements ?? [])
-        .filter((element) => {
-          const country = element.tags?.["addr:country"];
-
-          return !country || country.toUpperCase() === "CA";
-        })
-        .map(mapOverpassElement)
-        .filter((resource): resource is Resource => Boolean(resource)),
-    );
-
-    if (results.length >= 30 || radius === searchRadii[searchRadii.length - 1]) {
-      return { radiusKm: radius / 1000, resources: results };
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -453,45 +695,22 @@ function distanceKm(from: UserLocation, to: Resource["geo"]) {
 
 async function geocodeLocation(searchText: string): Promise<UserLocation> {
   const cleanedSearch = searchText.trim().replace(/\s+/g, " ");
-  const fallbackCities = [
-    "",
-    "Canada",
-    "Ontario Canada",
-    "Quebec Canada",
-    "British Columbia Canada",
-    "Alberta Canada",
-    "Manitoba Canada",
-    "Saskatchewan Canada",
-    "Nova Scotia Canada",
-    "New Brunswick Canada",
-    "Newfoundland and Labrador Canada",
-    "Prince Edward Island Canada",
-    "Yukon Canada",
-    "Northwest Territories Canada",
-    "Nunavut Canada",
-    "Toronto Canada",
-    "Montreal Canada",
-    "Vancouver Canada",
-    "Calgary Canada",
-    "Edmonton Canada",
-    "Ottawa Canada",
-    "Winnipeg Canada",
-    "Quebec City Canada",
-    "Halifax Canada",
-    "Saskatoon Canada",
-    "Regina Canada",
-    "St John's Canada",
-  ];
+  const localPreciseMatch = localGeocodeLocation(cleanedSearch);
+
+  if (localPreciseMatch) {
+    return localPreciseMatch;
+  }
+
+  const postalCodeMatch = cleanedSearch.toUpperCase().match(/^([A-Z]\d[A-Z])\s?(\d[A-Z]\d)$/);
+  const normalizedPostalCode = postalCodeMatch ? `${postalCodeMatch[1]} ${postalCodeMatch[2]}` : null;
   const streetWithoutNumber = cleanedSearch.replace(/^\d+\s+/, "");
   const queries = Array.from(
     new Set([
+      ...(normalizedPostalCode ? [normalizedPostalCode, `${normalizedPostalCode}, Canada`] : []),
       cleanedSearch,
-      ...fallbackCities.filter(Boolean).map((suffix) => `${cleanedSearch}, ${suffix}`),
+      `${cleanedSearch}, Canada`,
       ...(streetWithoutNumber !== cleanedSearch
-        ? [
-            streetWithoutNumber,
-            ...fallbackCities.filter(Boolean).map((suffix) => `${streetWithoutNumber}, ${suffix}`),
-          ]
+        ? [streetWithoutNumber, `${streetWithoutNumber}, Canada`]
         : []),
     ]),
   );
@@ -507,7 +726,7 @@ async function geocodeLocation(searchText: string): Promise<UserLocation> {
 
   for (const query of queries) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 7000);
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
 
     try {
       const response = await fetch(
@@ -545,6 +764,12 @@ async function geocodeLocation(searchText: string): Promise<UserLocation> {
     } finally {
       window.clearTimeout(timeout);
     }
+  }
+
+  const localBroadMatch = localGeocodeLocation(cleanedSearch, true);
+
+  if (localBroadMatch) {
+    return localBroadMatch;
   }
 
   throw new Error("No Canadian match found. Try adding the city and province, for example: 516 Laking Terrace, Milton, ON.");
@@ -603,6 +828,10 @@ function isStandaloneDisplay() {
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.userAgent.includes("wv");
 }
 
+function isInstallCapableBrowser() {
+  return window.location.protocol === "https:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+}
+
 export default function App() {
   const [query, setQuery] = useState("");
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
@@ -625,6 +854,7 @@ export default function App() {
   const [sourceStatus, setSourceStatus] = useState("Searching for nearby food support in Canada...");
   const [view, setView] = useState<AppView>("match");
   const [showDistanceInfo, setShowDistanceInfo] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplay());
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
@@ -708,8 +938,8 @@ export default function App() {
         setLiveResources(nextResources);
         setSourceStatus(
           nextResources.length
-            ? `Found ${nextResources.length} map listings within ${radiusKm} km. Showing the closest 30.`
-            : "No nearby map listings returned, so curated starter entries are shown as a fallback.",
+            ? `Found ${nextResources.length} live map listings within ${radiusKm} km. Showing the closest 30 from live and verified Canada data.`
+            : "No nearby live map listings returned, so verified Canada seed entries are shown.",
         );
       })
       .catch(() => {
@@ -717,7 +947,7 @@ export default function App() {
           return;
         }
 
-        setSourceStatus("Live map data is unavailable right now, so curated starter entries are shown as a fallback.");
+        setSourceStatus("Live map data is unavailable right now, so verified Canada seed entries are shown.");
       });
 
     return () => {
@@ -951,6 +1181,7 @@ export default function App() {
 
   async function promptInstallApp() {
     if (!installPrompt) {
+      setShowInstallHelp(true);
       return;
     }
 
@@ -1135,14 +1366,14 @@ export default function App() {
         <section className="panel app-panel">
           <div className="section-title compact">
             <Download size={18} aria-hidden="true" />
-            <h2>{isInstalledApp ? "Installed app mode" : "Website mode"}</h2>
+            <h2>{isInstalledApp ? "Application installed" : "Application install"}</h2>
           </div>
           <p>
             {isInstalledApp
               ? "Local saves are available on this device."
-              : "Install the app to save resources locally on your computer."}
+              : "Install Community Pantry to save resources locally on this computer."}
           </p>
-          {!isInstalledApp && installPrompt && (
+          {!isInstalledApp && (
             <button className="sidebar-action" onClick={promptInstallApp} type="button">
               <Download size={16} aria-hidden="true" />
               Install app
@@ -1210,6 +1441,14 @@ export default function App() {
               <h3>{view === "all" ? "Closest 30 resources" : "Top 5 closest matches"}</h3>
               <span>{listedResources.length} shown from {poolSize}</span>
             </div>
+            {!listedResources.length && (
+              <article className="empty-state">
+                <h3>No matching food support found</h3>
+                <p>
+                  Try turning off open-now filtering, searching a nearby city, or adding the province to your address.
+                </p>
+              </article>
+            )}
             {listedResources.map((match, index) => {
               const { resource, score, calculatedDistanceKm, status } = match;
               const isSaved = savedResourceIds.includes(resource.id);
@@ -1417,6 +1656,42 @@ export default function App() {
               <p>
                 The distance on each card is a straight-line estimate. The route line and Google Maps link can be
                 longer because roads, highways, and transit paths are not perfectly straight.
+              </p>
+            </div>
+          </article>
+        </section>
+      )}
+      {showInstallHelp && (
+        <section
+          aria-label="Application install help"
+          className="details-backdrop compact-backdrop"
+          onClick={() => setShowInstallHelp(false)}
+        >
+          <article className="info-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="details-header">
+              <div>
+                <span className="type-pill">App</span>
+                <h2>Install Community Pantry</h2>
+              </div>
+              <button
+                aria-label="Close application install help"
+                className="icon-button"
+                onClick={() => setShowInstallHelp(false)}
+                type="button"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="details-section">
+              <p>
+                If your browser supports app installs, use the install icon in the address bar or choose Install app
+                from the browser menu. Once installed, Community Pantry opens in its own app window and local saving is
+                enabled on that device.
+              </p>
+              <p>
+                {isInstallCapableBrowser()
+                  ? "If the install prompt did not open, the browser may already have the app installed or may require using its menu."
+                  : "App install requires the live HTTPS website or a local development server."}
               </p>
             </div>
           </article>
