@@ -22,8 +22,7 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
   browser GPS permission.
 - Current-time open/closed status calculated from each resource's service
   windows.
-- Clickable resource details with contact info, directions, requirements, and
-  local saved resources.
+- Clickable resource details with contact info, directions, and requirements.
 - OpenStreetMap-powered Canada map with ranked resource markers.
 - Food support filters for urgent needs, dietary needs, no-ID access, students,
   families, baby supplies, and delivery.
@@ -32,7 +31,6 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
 - Verified Canadian seed directory across Ontario, Quebec, Western Canada,
   Atlantic Canada, and the territories, merged with live map listings near the
   user's address.
-- Installable PWA support with local saves available inside the installed app.
 
 ## Run Locally
 

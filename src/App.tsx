@@ -1,8 +1,6 @@
 import {
-  Bookmark,
   CheckCircle2,
   Clock3,
-  Download,
   ExternalLink,
   HeartHandshake,
   Info,
@@ -57,11 +55,6 @@ type OverpassElement = {
 type AppView = "match" | "all";
 
 type GraniteStatus = "idle" | "checking" | "active" | "fallback";
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 const examples = [
   "I need food today and I do not have ID",
@@ -827,14 +820,6 @@ function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
   return `Matches ${matched.slice(0, 3).join(", ")}${matched.length > 3 ? " and more" : ""}.`;
 }
 
-function isStandaloneDisplay() {
-  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.userAgent.includes("wv");
-}
-
-function isInstallCapableBrowser() {
-  return window.location.protocol === "https:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-}
-
 export default function App() {
   const [query, setQuery] = useState("");
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
@@ -859,16 +844,6 @@ export default function App() {
   const [sourceStatus, setSourceStatus] = useState("Searching for nearby food support in Canada...");
   const [view, setView] = useState<AppView>("match");
   const [showDistanceInfo, setShowDistanceInfo] = useState(false);
-  const [showInstallHelp, setShowInstallHelp] = useState(false);
-  const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplay());
-  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-  const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem("community-pantry-app-saved") ?? "[]") as number[];
-    } catch {
-      return [];
-    }
-  });
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -916,35 +891,6 @@ export default function App() {
 
     return () => window.clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    const handleBeforeInstall = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPromptEvent);
-    };
-    const handleInstalled = () => {
-      setIsInstalledApp(true);
-      setInstallPrompt(null);
-    };
-    const handleDisplayChange = () => setIsInstalledApp(isStandaloneDisplay());
-    const displayQuery = window.matchMedia("(display-mode: standalone)");
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-    window.addEventListener("appinstalled", handleInstalled);
-    displayQuery.addEventListener("change", handleDisplayChange);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-      window.removeEventListener("appinstalled", handleInstalled);
-      displayQuery.removeEventListener("change", handleDisplayChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isInstalledApp) {
-      window.localStorage.setItem("community-pantry-app-saved", JSON.stringify(savedResourceIds));
-    }
-  }, [isInstalledApp, savedResourceIds]);
 
   useEffect(() => {
     const trimmedQuery = query.trim();
@@ -1222,34 +1168,6 @@ export default function App() {
     setSelectedResourceId(null);
   }
 
-  function toggleSavedResource(resourceId: number) {
-    if (!isInstalledApp) {
-      return;
-    }
-
-    setSavedResourceIds((current) =>
-      current.includes(resourceId)
-        ? current.filter((savedId) => savedId !== resourceId)
-        : [...current, resourceId],
-    );
-  }
-
-  async function promptInstallApp() {
-    if (!installPrompt) {
-      setShowInstallHelp(true);
-      return;
-    }
-
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-
-    if (choice.outcome === "accepted") {
-      setIsInstalledApp(true);
-    }
-
-    setInstallPrompt(null);
-  }
-
   async function handleLocationSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1422,24 +1340,6 @@ export default function App() {
           </label>
         </section>
 
-        <section className="panel app-panel">
-          <div className="section-title compact">
-            <Download size={18} aria-hidden="true" />
-            <h2>{isInstalledApp ? "Application installed" : "Application install"}</h2>
-          </div>
-          <p>
-            {isInstalledApp
-              ? "Local saves are available on this device."
-              : "Install Community Pantry to save resources locally on this computer."}
-          </p>
-          {!isInstalledApp && (
-            <button className="sidebar-action" onClick={promptInstallApp} type="button">
-              <Download size={16} aria-hidden="true" />
-              Install app
-            </button>
-          )}
-        </section>
-
         <section className="trust-strip" aria-label="Prize track alignment">
           <span>
             <Sparkles size={15} aria-hidden="true" />
@@ -1510,7 +1410,6 @@ export default function App() {
             )}
             {listedResources.map((match, index) => {
               const { resource, score, calculatedDistanceKm, status } = match;
-              const isSaved = savedResourceIds.includes(resource.id);
 
               return (
               <article
@@ -1562,19 +1461,6 @@ export default function App() {
                     <Info size={16} aria-hidden="true" />
                     Contact info
                   </button>
-                  {isInstalledApp && (
-                    <button
-                      className={isSaved ? "saved" : ""}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleSavedResource(resource.id);
-                      }}
-                      type="button"
-                    >
-                      <Bookmark size={16} aria-hidden="true" />
-                      {isSaved ? "Saved" : "Save"}
-                    </button>
-                  )}
                 </div>
               </article>
               );
@@ -1672,16 +1558,6 @@ export default function App() {
               <MapPin size={16} aria-hidden="true" />
               Show route on map
             </button>
-            {isInstalledApp && (
-              <button
-                className={savedResourceIds.includes(selectedMatch.resource.id) ? "wide-action saved" : "wide-action"}
-                onClick={() => toggleSavedResource(selectedMatch.resource.id)}
-                type="button"
-              >
-                <Bookmark size={16} aria-hidden="true" />
-                {savedResourceIds.includes(selectedMatch.resource.id) ? "Saved locally" : "Save locally"}
-              </button>
-            )}
           </article>
         </section>
       )}
@@ -1715,42 +1591,6 @@ export default function App() {
               <p>
                 The distance on each card is a straight-line estimate. The route line and Google Maps link can be
                 longer because roads, highways, and transit paths are not perfectly straight.
-              </p>
-            </div>
-          </article>
-        </section>
-      )}
-      {showInstallHelp && (
-        <section
-          aria-label="Application install help"
-          className="details-backdrop compact-backdrop"
-          onClick={() => setShowInstallHelp(false)}
-        >
-          <article className="info-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="details-header">
-              <div>
-                <span className="type-pill">App</span>
-                <h2>Install Community Pantry</h2>
-              </div>
-              <button
-                aria-label="Close application install help"
-                className="icon-button"
-                onClick={() => setShowInstallHelp(false)}
-                type="button"
-              >
-                <X size={20} aria-hidden="true" />
-              </button>
-            </div>
-            <div className="details-section">
-              <p>
-                If your browser supports app installs, use the install icon in the address bar or choose Install app
-                from the browser menu. Once installed, Community Pantry opens in its own app window and local saving is
-                enabled on that device.
-              </p>
-              <p>
-                {isInstallCapableBrowser()
-                  ? "If the install prompt did not open, the browser may already have the app installed or may require using its menu."
-                  : "App install requires the live HTTPS website or a local development server."}
               </p>
             </div>
           </article>
