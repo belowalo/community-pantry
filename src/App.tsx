@@ -318,18 +318,19 @@ function scoreResource(
     .join(" ")
     .toLowerCase();
 
-  const needScore = effectiveNeeds.reduce(
-    (score, need) => score + (resource.tags.includes(need) ? 16 : -4),
-    0,
-  );
-  const queryScore = normalizedQuery
+  const matchedNeeds = effectiveNeeds.filter((need) => resource.tags.includes(need)).length;
+  const needFitScore = effectiveNeeds.length ? (matchedNeeds / effectiveNeeds.length) * 35 : 25;
+  const queryMatchScore = Math.min(
+    5,
+    normalizedQuery
     .split(/\s+/)
     .filter((word) => word.length > 2)
-    .reduce((score, word) => score + (searchable.includes(word) ? 5 : 0), 0);
-  const openScore = isOpen ? 10 : 0;
-  const distanceScore = Math.max(0, 18 - calculatedDistanceKm * 1.8);
+      .reduce((score, word) => score + (searchable.includes(word) ? 1.5 : 0), 0),
+  );
+  const openScore = isOpen ? 10 : 4;
+  const distanceScore = Math.max(0, 50 * Math.exp(-calculatedDistanceKm / 10));
 
-  return Math.round(needScore + queryScore + openScore + distanceScore);
+  return Math.min(100, Math.round(needFitScore + queryMatchScore + openScore + distanceScore));
 }
 
 function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
@@ -347,7 +348,7 @@ function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
 
 export default function App() {
   const [query, setQuery] = useState("");
-  const [selectedNeeds, setSelectedNeeds] = useState<string[]>(["urgent", "groceries", "no-id"]);
+  const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [locationInput, setLocationInput] = useState("Sheridan Davis Campus, Brampton");
   const [userLocation, setUserLocation] = useState<UserLocation>({
@@ -407,7 +408,15 @@ export default function App() {
         };
       })
       .filter(({ status }) => (onlyOpen ? status.isOpen : true))
-      .sort((a, b) => b.score - a.score || a.calculatedDistanceKm - b.calculatedDistanceKm);
+      .sort((a, b) => {
+        const scoreDelta = b.score - a.score;
+
+        if (Math.abs(scoreDelta) <= 8) {
+          return a.calculatedDistanceKm - b.calculatedDistanceKm;
+        }
+
+        return scoreDelta;
+      });
   }, [effectiveNeeds, now, onlyOpen, query, userLocation]);
 
   const bestMatch = rankedResources[0]?.resource;
@@ -790,6 +799,7 @@ export default function App() {
             <p className="eyebrow">From {userLocation.label}</p>
             <h2>{rankedResources.length} matched support options</h2>
             <p className="time-readout">Open status checked at {formatClock(now)}</p>
+            <p className="time-readout">Match score weighs needs, distance, open status, and text relevance.</p>
           </div>
         </header>
 
