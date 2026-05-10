@@ -19,6 +19,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { needOptions, Resource, resources, ServiceWindow } from "./data";
+import { extractNeedsWithGranite, GraniteNeedExtraction } from "./ibmGranite";
 
 type UserLocation = {
   label: string;
@@ -54,6 +55,8 @@ type OverpassElement = {
 };
 
 type AppView = "match" | "all";
+
+type GraniteStatus = "idle" | "checking" | "active" | "fallback";
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -835,6 +838,8 @@ function isInstallCapableBrowser() {
 export default function App() {
   const [query, setQuery] = useState("");
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
+  const [graniteExtraction, setGraniteExtraction] = useState<GraniteNeedExtraction | null>(null);
+  const [graniteStatus, setGraniteStatus] = useState<GraniteStatus>("idle");
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [locationInput, setLocationInput] = useState("Sheridan Davis Campus, Brampton");
   const [userLocation, setUserLocation] = useState<UserLocation>({
@@ -870,10 +875,28 @@ export default function App() {
   const routeLayerRef = useRef<L.Polyline | null>(null);
 
   const detectedNeeds = useMemo(() => detectedNeedIds(query), [query]);
+  const graniteNeeds = graniteExtraction?.needs ?? [];
   const effectiveNeeds = useMemo(
-    () => Array.from(new Set([...selectedNeeds, ...detectedNeeds])),
-    [detectedNeeds, selectedNeeds],
+    () => Array.from(new Set([...selectedNeeds, ...detectedNeeds, ...graniteNeeds])),
+    [detectedNeeds, graniteNeeds, selectedNeeds],
   );
+  const graniteStatusText = useMemo(() => {
+    if (graniteStatus === "checking") {
+      return "IBM Granite is reading your situation...";
+    }
+
+    if (graniteStatus === "active" && graniteExtraction) {
+      return graniteExtraction.needs.length
+        ? `IBM Granite detected ${graniteExtraction.needs.length} need${graniteExtraction.needs.length === 1 ? "" : "s"}.`
+        : "IBM Granite is active; choose needs manually if needed.";
+    }
+
+    if (graniteStatus === "fallback") {
+      return "IBM Granite is not running locally, so built-in matching is active.";
+    }
+
+    return "IBM Granite can enhance this box when Ollama is running locally.";
+  }, [graniteExtraction, graniteStatus]);
   const allResources = useMemo(() => {
     const liveKeys = new Set(
       liveResources.map(
@@ -922,6 +945,38 @@ export default function App() {
       window.localStorage.setItem("community-pantry-app-saved", JSON.stringify(savedResourceIds));
     }
   }, [isInstalledApp, savedResourceIds]);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+
+    if (trimmedQuery.length < 12) {
+      setGraniteExtraction(null);
+      setGraniteStatus("idle");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setGraniteStatus("checking");
+
+      extractNeedsWithGranite(trimmedQuery, controller.signal)
+        .then((extraction) => {
+          setGraniteExtraction(extraction);
+          setGraniteStatus("active");
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setGraniteExtraction(null);
+            setGraniteStatus("fallback");
+          }
+        });
+    }, 650);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [query]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1290,17 +1345,21 @@ export default function App() {
               </button>
             ))}
           </div>
+          <p className={`granite-status ${graniteStatus}`}>{graniteStatusText}</p>
           <div className="need-header">
             <h2>Needs</h2>
             <span>
-              {detectedNeeds.length
-                ? `${detectedNeeds.length} detected from your sentence`
+              {graniteNeeds.length
+                ? `${graniteNeeds.length} detected by IBM Granite`
+                : detectedNeeds.length
+                  ? `${detectedNeeds.length} detected from your sentence`
                 : "Type a sentence or choose manually"}
             </span>
           </div>
           <div className="need-grid">
             {needOptions.map((option) => {
-              const isDetected = detectedNeeds.includes(option.id);
+              const isGraniteDetected = graniteNeeds.includes(option.id);
+              const isDetected = detectedNeeds.includes(option.id) || isGraniteDetected;
               const isSelected = selectedNeeds.includes(option.id);
               const isActive = isSelected || isDetected;
 
@@ -1313,7 +1372,7 @@ export default function App() {
                 >
                   {isActive && <CheckCircle2 size={14} aria-hidden="true" />}
                   {option.label}
-                  {isDetected && <span>auto</span>}
+                  {isGraniteDetected ? <span>IBM</span> : isDetected && <span>auto</span>}
                 </button>
               );
             })}
@@ -1384,7 +1443,7 @@ export default function App() {
         <section className="trust-strip" aria-label="Prize track alignment">
           <span>
             <Sparkles size={15} aria-hidden="true" />
-            Sentence matching
+            IBM Granite ready
           </span>
           <span>
             <HeartHandshake size={15} aria-hidden="true" />

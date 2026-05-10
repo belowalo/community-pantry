@@ -9,12 +9,13 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
   SDG 11 Sustainable Cities.
 - Best Startup Potential: designed for schools, municipalities, and nonprofits
   that need smarter intake and referral tools.
-- Best Use of IBM Tech: the matching layer is structured so IBM Cloud or watsonx
-  services can replace the local parsing and data-ingest pieces later.
+- Best Use of IBM Tech: the Situation box can use IBM Granite 3.3 through a
+  local Ollama runtime to extract structured needs from plain-language requests,
+  with the built-in parser as a reliable fallback.
 
 ## MVP Features
 
-- Plain-language need search.
+- Plain-language need search with optional IBM Granite need extraction.
 - Combined Situation and Needs panel where sentence parsing checks matching
   needs like halal, no ID, urgent, student, family, delivery, and baby supplies.
 - Real distance calculation from a typed address, landmark, postal code, or
@@ -41,6 +42,20 @@ npm run dev
 ```
 
 Then open the local URL printed by Vite.
+
+## IBM Granite Demo
+
+The app can use IBM Granite locally without IBM Cloud billing. Install Ollama,
+then run:
+
+```bash
+ollama pull granite3.3:2b
+```
+
+With Ollama running on `http://127.0.0.1:11434`, the Situation box sends the
+user's sentence to IBM Granite and merges the returned needs into ranking. If
+Granite is not installed or not running, the app automatically falls back to the
+built-in parser so the demo still works.
 
 ## Share Online
 

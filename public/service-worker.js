@@ -1,4 +1,4 @@
-const CACHE_NAME = "community-pantry-v5";
+const CACHE_NAME = "community-pantry-v6";
 const APP_SHELL = ["/community-pantry/", "/community-pantry/manifest.webmanifest", "/community-pantry/pantry-icon.svg"];
 
 self.addEventListener("install", (event) => {

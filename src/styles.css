@@ -270,6 +270,26 @@ textarea:focus {
   transform: translateY(-1px);
 }
 
+.granite-status {
+  margin-top: 10px;
+  color: #d7e6df;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.granite-status.active {
+  color: #f0c15f;
+  font-weight: 800;
+}
+
+.granite-status.checking {
+  color: #fff4d5;
+}
+
+.granite-status.fallback {
+  color: #c7d8cf;
+}
+
 .need-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
