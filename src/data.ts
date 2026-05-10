@@ -22,7 +22,9 @@ export type Resource = {
   requirements: string[];
   languages: string[];
   supplies: string[];
-  serviceWindows: ServiceWindow[];
+  serviceWindows?: ServiceWindow[];
+  hoursText?: string;
+  source?: "curated" | "openstreetmap";
   geo: {
     lat: number;
     lng: number;

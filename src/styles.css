@@ -602,12 +602,6 @@ textarea:focus {
   color: #194035;
 }
 
-.card-actions button.saved,
-.wide-action.saved {
-  background: #194035;
-  color: #fffdf4;
-}
-
 .details-backdrop {
   position: fixed;
   inset: 0;

@@ -1,5 +1,4 @@
 import {
-  Bookmark,
   CheckCircle2,
   Clock3,
   ExternalLink,
@@ -37,6 +36,18 @@ type RouteInfo = {
   distanceKm: number;
   durationMinutes: number;
   coordinates: [number, number][];
+};
+
+type OverpassElement = {
+  id: number;
+  lat?: number;
+  lon?: number;
+  center?: {
+    lat: number;
+    lon: number;
+  };
+  tags?: Record<string, string>;
+  type: "node" | "way" | "relation";
 };
 
 const examples = [
@@ -95,6 +106,156 @@ function directionsUrl(resource: Resource) {
   )}`;
 }
 
+function compactAddress(tags: Record<string, string>) {
+  const streetAddress = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ");
+  const parts = [streetAddress, tags["addr:city"] || tags["addr:town"] || tags["addr:suburb"]].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+function cleanPhone(tags: Record<string, string>) {
+  return tags.phone || tags["contact:phone"] || tags["operator:phone"];
+}
+
+function cleanWebsite(tags: Record<string, string>) {
+  const website = tags.website || tags["contact:website"] || tags.url;
+
+  if (!website) {
+    return undefined;
+  }
+
+  return website.startsWith("http") ? website : `https://${website}`;
+}
+
+function resourceTypeFromTags(tags: Record<string, string>): Resource["type"] {
+  if (tags.amenity === "soup_kitchen" || tags.social_facility === "soup_kitchen") {
+    return "Hot meal";
+  }
+
+  if (tags.amenity === "community_fridge" || tags.social_facility === "community_fridge") {
+    return "Community fridge";
+  }
+
+  return "Food bank";
+}
+
+function tagsFromOsm(type: Resource["type"], tags: Record<string, string>) {
+  const derived = new Set<string>();
+
+  if (type === "Hot meal") {
+    derived.add("hot-meal");
+    derived.add("urgent");
+  } else {
+    derived.add("groceries");
+  }
+
+  const text = Object.values(tags).join(" ").toLowerCase();
+
+  if (text.includes("halal")) derived.add("halal");
+  if (text.includes("vegetarian") || text.includes("vegan")) derived.add("vegetarian");
+  if (text.includes("deliver")) derived.add("delivery");
+  if (text.includes("family") || text.includes("child")) derived.add("family");
+  if (text.includes("newcomer") || text.includes("settlement")) derived.add("newcomer");
+  if (text.includes("student") || text.includes("campus")) derived.add("student");
+  if (text.includes("no id") || text.includes("drop")) derived.add("no-id");
+
+  return Array.from(derived);
+}
+
+function mapOverpassElement(element: OverpassElement): Resource | null {
+  const lat = element.lat ?? element.center?.lat;
+  const lng = element.lon ?? element.center?.lon;
+  const tags = element.tags ?? {};
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  const type = resourceTypeFromTags(tags);
+  const derivedTags = tagsFromOsm(type, tags);
+  const city = tags["addr:city"] || tags["addr:town"] || tags["addr:suburb"] || tags["is_in:city"] || "GTA";
+  const address = compactAddress(tags) || city;
+  const name =
+    tags.name ||
+    tags.operator ||
+    (type === "Hot meal" ? "Mapped hot meal program" : "Mapped food support site");
+  const phone = cleanPhone(tags);
+  const website = cleanWebsite(tags);
+  const email = tags.email || tags["contact:email"];
+  const hoursText = tags.opening_hours;
+
+  return {
+    id: 1000000 + element.id,
+    name,
+    type,
+    neighborhood: tags["addr:suburb"] || city,
+    city,
+    address,
+    contact: {
+      phone,
+      website,
+      email,
+      note: "Live OpenStreetMap listing. Details can be incomplete, so verify contact, eligibility, and hours before visiting.",
+    },
+    fallbackDistanceKm: 0,
+    tags: derivedTags,
+    requirements: [
+      hoursText ? `Mapped hours: ${hoursText}` : "Hours may not be listed in open map data",
+      "Verify current service details before visiting",
+    ],
+    languages: ["Confirm with provider"],
+    supplies: type === "Hot meal" ? ["Hot meals", "Community food support"] : ["Groceries", "Food support"],
+    hoursText,
+    source: "openstreetmap",
+    geo: { lat, lng },
+  };
+}
+
+async function fetchGtaOpenStreetMapResources() {
+  const gtaBoundingBox = "43.35,-80.1,44.15,-78.7";
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"~"food_bank|soup_kitchen|community_fridge"](${gtaBoundingBox});
+      way["amenity"~"food_bank|soup_kitchen|community_fridge"](${gtaBoundingBox});
+      relation["amenity"~"food_bank|soup_kitchen|community_fridge"](${gtaBoundingBox});
+      node["social_facility"~"food_bank|soup_kitchen|food_distribution"](${gtaBoundingBox});
+      way["social_facility"~"food_bank|soup_kitchen|food_distribution"](${gtaBoundingBox});
+      relation["social_facility"~"food_bank|soup_kitchen|food_distribution"](${gtaBoundingBox});
+      node["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${gtaBoundingBox});
+      way["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${gtaBoundingBox});
+      relation["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${gtaBoundingBox});
+    );
+    out center tags;
+  `;
+  const response = await fetch("https://overpass-api.de/api/interpreter", {
+    body: `data=${encodeURIComponent(query)}`,
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Could not load live GTA map data.");
+  }
+
+  const payload = (await response.json()) as { elements?: OverpassElement[] };
+  const seen = new Set<string>();
+
+  return (payload.elements ?? [])
+    .map(mapOverpassElement)
+    .filter((resource): resource is Resource => Boolean(resource))
+    .filter((resource) => {
+      const key = `${resource.name.toLowerCase()}|${resource.geo.lat.toFixed(4)}|${resource.geo.lng.toFixed(4)}`;
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+}
+
 function resourceWebsiteLabel(url: string) {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
@@ -135,8 +296,8 @@ function dayLabel(day: number) {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][day];
 }
 
-function windowsForDay(serviceWindows: ServiceWindow[], day: number) {
-  return serviceWindows
+function windowsForDay(serviceWindows: ServiceWindow[] | undefined, day: number) {
+  return (serviceWindows ?? [])
     .filter((window) => window.days.includes(day))
     .sort((a, b) => minutesFromTime(a.start) - minutesFromTime(b.start));
 }
@@ -150,6 +311,14 @@ function formatWindows(windows: ServiceWindow[]) {
 }
 
 function serviceStatus(resource: Resource, now: Date) {
+  if (!resource.serviceWindows?.length) {
+    return {
+      isOpen: false,
+      label: resource.hoursText ? `Mapped hours: ${resource.hoursText}` : "Hours not listed",
+      todayText: "Verify hours before visiting",
+    };
+  }
+
   const today = now.getDay();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const todaysWindows = windowsForDay(resource.serviceWindows, today);
@@ -364,13 +533,8 @@ export default function App() {
   const [routeResourceId, setRouteResourceId] = useState<number | null>(null);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [routeStatus, setRouteStatus] = useState("Route shown for the top match.");
-  const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem("community-pantry-saved") ?? "[]") as number[];
-    } catch {
-      return [];
-    }
-  });
+  const [liveResources, setLiveResources] = useState<Resource[]>([]);
+  const [sourceStatus, setSourceStatus] = useState("Loading live GTA food support listings...");
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -381,6 +545,18 @@ export default function App() {
     () => Array.from(new Set([...selectedNeeds, ...detectedNeeds])),
     [detectedNeeds, selectedNeeds],
   );
+  const allResources = useMemo(() => {
+    const liveKeys = new Set(
+      liveResources.map(
+        (resource) => `${resource.name.toLowerCase()}|${resource.geo.lat.toFixed(3)}|${resource.geo.lng.toFixed(3)}`,
+      ),
+    );
+    const curatedWithoutDuplicates = resources.filter(
+      (resource) => !liveKeys.has(`${resource.name.toLowerCase()}|${resource.geo.lat.toFixed(3)}|${resource.geo.lng.toFixed(3)}`),
+    );
+
+    return [...liveResources, ...curatedWithoutDuplicates];
+  }, [liveResources]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60000);
@@ -388,8 +564,37 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchGtaOpenStreetMapResources()
+      .then((nextResources) => {
+        if (cancelled) {
+          return;
+        }
+
+        setLiveResources(nextResources);
+        setSourceStatus(
+          nextResources.length
+            ? `Loaded ${nextResources.length} live GTA map listings from OpenStreetMap, plus curated entries. Open map data can be incomplete.`
+            : "No live map listings returned, so the curated GTA starter set is shown.",
+        );
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setSourceStatus("Live map data is unavailable right now, so the curated GTA starter set is shown.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const rankedResources = useMemo(() => {
-    return resources
+    return allResources
       .map((resource) => {
         const calculatedDistanceKm = distanceKm(userLocation, resource.geo);
         const status = serviceStatus(resource, now);
@@ -417,20 +622,20 @@ export default function App() {
 
         return scoreDelta;
       });
-  }, [effectiveNeeds, now, onlyOpen, query, userLocation]);
+  }, [allResources, effectiveNeeds, now, onlyOpen, query, userLocation]);
 
   const bestMatch = rankedResources[0]?.resource;
   const activeRouteResource = useMemo(
     () =>
-      resources.find((resource) => resource.id === (routeResourceId ?? bestMatch?.id)) ??
+      allResources.find((resource) => resource.id === (routeResourceId ?? bestMatch?.id)) ??
       bestMatch,
-    [bestMatch, routeResourceId],
+    [allResources, bestMatch, routeResourceId],
   );
   const selectedMatch = useMemo(
     () =>
       rankedResources.find(({ resource }) => resource.id === selectedResourceId) ??
       (selectedResourceId
-        ? resources
+        ? allResources
             .map((resource) => {
               const calculatedDistanceKm = distanceKm(userLocation, resource.geo);
               const status = serviceStatus(resource, now);
@@ -450,12 +655,8 @@ export default function App() {
             })
             .find(({ resource }) => resource.id === selectedResourceId)
         : undefined),
-    [effectiveNeeds, now, query, rankedResources, selectedResourceId, userLocation],
+    [allResources, effectiveNeeds, now, query, rankedResources, selectedResourceId, userLocation],
   );
-
-  useEffect(() => {
-    window.localStorage.setItem("community-pantry-saved", JSON.stringify(savedResourceIds));
-  }, [savedResourceIds]);
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) {
@@ -589,14 +790,6 @@ export default function App() {
   function toggleNeed(id: string) {
     setSelectedNeeds((current) =>
       current.includes(id) ? current.filter((need) => need !== id) : [...current, id],
-    );
-  }
-
-  function toggleSavedResource(resourceId: number) {
-    setSavedResourceIds((current) =>
-      current.includes(resourceId)
-        ? current.filter((savedId) => savedId !== resourceId)
-        : [...current, resourceId],
     );
   }
 
@@ -788,7 +981,7 @@ export default function App() {
           </span>
           <span>
             <ShieldCheck size={15} aria-hidden="true" />
-            Local saves
+            Live map data
           </span>
         </section>
       </aside>
@@ -800,6 +993,7 @@ export default function App() {
             <h2>{rankedResources.length} matched support options</h2>
             <p className="time-readout">Open status checked at {formatClock(now)}</p>
             <p className="time-readout">Match score weighs needs, distance, open status, and text relevance.</p>
+            <p className="time-readout">{sourceStatus}</p>
           </div>
         </header>
 
@@ -821,7 +1015,6 @@ export default function App() {
           <section className="results" aria-label="Matched resources">
             {rankedResources.map((match, index) => {
               const { resource, score, calculatedDistanceKm, status } = match;
-              const isSaved = savedResourceIds.includes(resource.id);
 
               return (
               <article
@@ -872,17 +1065,6 @@ export default function App() {
                   <button onClick={(event) => { event.stopPropagation(); openDetails(match); }} type="button">
                     <Info size={16} aria-hidden="true" />
                     Contact info
-                  </button>
-                  <button
-                    className={isSaved ? "saved" : ""}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleSavedResource(resource.id);
-                    }}
-                    type="button"
-                  >
-                    <Bookmark size={16} aria-hidden="true" />
-                    {isSaved ? "Saved" : "Save"}
                   </button>
                 </div>
               </article>
@@ -980,15 +1162,6 @@ export default function App() {
             >
               <MapPin size={16} aria-hidden="true" />
               Show route on map
-            </button>
-
-            <button
-              className={savedResourceIds.includes(selectedMatch.resource.id) ? "wide-action saved" : "wide-action"}
-              onClick={() => toggleSavedResource(selectedMatch.resource.id)}
-              type="button"
-            >
-              <Bookmark size={16} aria-hidden="true" />
-              {savedResourceIds.includes(selectedMatch.resource.id) ? "Saved locally" : "Save locally"}
             </button>
           </article>
         </section>
