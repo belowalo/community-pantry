@@ -1,9 +1,14 @@
 import {
+  Bookmark,
+  BrainCircuit,
   CheckCircle2,
+  Cloud,
   Clock3,
+  Download,
   ExternalLink,
   HeartHandshake,
   Info,
+  List,
   LocateFixed,
   MapPin,
   Search,
@@ -50,6 +55,21 @@ type OverpassElement = {
   type: "node" | "way" | "relation";
 };
 
+type AppView = "match" | "all";
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+type TriagePlan = {
+  urgency: "Low" | "Medium" | "High";
+  confidence: number;
+  summary: string;
+  nextSteps: string[];
+  modelMode: "Local rules" | "watsonx ready";
+};
+
 const examples = [
   "I need food today and I do not have ID",
   "Student looking for halal groceries near Sheridan",
@@ -69,6 +89,45 @@ const queryPatterns: Record<string, string[]> = {
   family: ["family", "kids", "children", "child", "parent"],
   newcomer: ["newcomer", "refugee", "immigrant", "settlement"],
 };
+
+function normalizeResourceName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\b(inc|the|food bank|foodbank|pantry|program|centre|center|location|site)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function resourceDedupKey(resource: Resource) {
+  const name = normalizeResourceName(resource.name);
+  const latBucket = Math.round(resource.geo.lat * 500);
+  const lngBucket = Math.round(resource.geo.lng * 500);
+
+  return `${name}|${latBucket}|${lngBucket}`;
+}
+
+function curateResourcePool(resourcePool: Resource[]) {
+  const seenLocations = new Set<string>();
+  const seenNames = new Set<string>();
+
+  return resourcePool.filter((resource) => {
+    const normalizedName = normalizeResourceName(resource.name);
+    const key = resourceDedupKey(resource);
+    const isGenericName = normalizedName.includes("food support in") || normalizedName.includes("hot meal in");
+
+    if (!normalizedName || seenLocations.has(key) || (!isGenericName && seenNames.has(normalizedName))) {
+      return false;
+    }
+
+    seenLocations.add(key);
+    if (!isGenericName) {
+      seenNames.add(normalizedName);
+    }
+
+    return true;
+  });
+}
 
 function detectedNeedIds(query: string) {
   const normalizedQuery = query.toLowerCase().replace(/['\u2019]/g, "");
@@ -175,17 +234,18 @@ function mapOverpassElement(element: OverpassElement): Resource | null {
   const derivedTags = tagsFromOsm(type, tags);
   const city = tags["addr:city"] || tags["addr:town"] || tags["addr:suburb"] || tags["is_in:city"] || "GTA";
   const address = compactAddress(tags) || city;
-  const name =
-    tags.name ||
-    tags.operator ||
-    (type === "Hot meal" ? "Mapped hot meal program" : "Mapped food support site");
+  const fallbackName = `${type === "Hot meal" ? "Hot meal" : "Food support"} in ${
+    city
+  }${address && address !== city ? ` near ${address.split(",")[0]}` : ""}`;
+  const name = tags.name || tags.operator || fallbackName;
   const phone = cleanPhone(tags);
   const website = cleanWebsite(tags);
   const email = tags.email || tags["contact:email"];
   const hoursText = tags.opening_hours;
+  const idOffset = element.type === "node" ? 1000000 : element.type === "way" ? 2000000 : 3000000;
 
   return {
-    id: 1000000 + element.id,
+    id: idOffset + element.id,
     name,
     type,
     neighborhood: tags["addr:suburb"] || city,
@@ -239,21 +299,12 @@ async function fetchGtaOpenStreetMapResources() {
   }
 
   const payload = (await response.json()) as { elements?: OverpassElement[] };
-  const seen = new Set<string>();
 
-  return (payload.elements ?? [])
+  return curateResourcePool(
+    (payload.elements ?? [])
     .map(mapOverpassElement)
-    .filter((resource): resource is Resource => Boolean(resource))
-    .filter((resource) => {
-      const key = `${resource.name.toLowerCase()}|${resource.geo.lat.toFixed(4)}|${resource.geo.lng.toFixed(4)}`;
-
-      if (seen.has(key)) {
-        return false;
-      }
-
-      seen.add(key);
-      return true;
-    });
+      .filter((resource): resource is Resource => Boolean(resource)),
+  );
 }
 
 function resourceWebsiteLabel(url: string) {
@@ -515,6 +566,40 @@ function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
   return `Matches ${matched.slice(0, 3).join(", ")}${matched.length > 3 ? " and more" : ""}.`;
 }
 
+function buildTriagePlan(query: string, effectiveNeeds: string[], topMatches: RankedResource[]): TriagePlan {
+  const urgentSignals = ["today", "tonight", "now", "urgent", "emergency", "hungry", "asap"];
+  const lowerQuery = query.toLowerCase();
+  const hasUrgency = urgentSignals.some((signal) => lowerQuery.includes(signal)) || effectiveNeeds.includes("urgent");
+  const hasBarrier = effectiveNeeds.some((need) => ["no-id", "delivery", "baby", "newcomer"].includes(need));
+  const nearbyOpen = topMatches.some((match) => match.status.isOpen && match.calculatedDistanceKm < 8);
+  const urgency: TriagePlan["urgency"] = hasUrgency && hasBarrier ? "High" : hasUrgency || hasBarrier ? "Medium" : "Low";
+  const firstMatch = topMatches[0];
+  const nextSteps = [
+    firstMatch
+      ? `Start with ${firstMatch.resource.name}, ${firstMatch.calculatedDistanceKm.toFixed(1)} km away.`
+      : "Set your location to rank nearby support.",
+    nearbyOpen ? "Prioritize an open-now option before checking broader matches." : "Call or check details before travelling.",
+    effectiveNeeds.includes("no-id") ? "Ask about no-ID intake before visiting." : "Bring ID if you have it, but confirm requirements first.",
+  ];
+
+  return {
+    urgency,
+    confidence: Math.min(96, 62 + effectiveNeeds.length * 7 + (query.trim() ? 12 : 0) + (firstMatch ? 8 : 0)),
+    summary:
+      urgency === "High"
+        ? "The situation sounds time-sensitive and has access barriers, so nearby open programs should be prioritized."
+        : urgency === "Medium"
+          ? "There are some constraints to account for, so the ranking favours closer and better-fit services."
+          : "The search is broad, so the ranking is mostly driven by distance and general food access fit.",
+    nextSteps,
+    modelMode: import.meta.env.VITE_WATSONX_ENDPOINT ? "watsonx ready" : "Local rules",
+  };
+}
+
+function isStandaloneDisplay() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.userAgent.includes("wv");
+}
+
 export default function App() {
   const [query, setQuery] = useState("");
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
@@ -535,6 +620,16 @@ export default function App() {
   const [routeStatus, setRouteStatus] = useState("Route shown for the top match.");
   const [liveResources, setLiveResources] = useState<Resource[]>([]);
   const [sourceStatus, setSourceStatus] = useState("Loading live GTA food support listings...");
+  const [view, setView] = useState<AppView>("match");
+  const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplay());
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem("community-pantry-app-saved") ?? "[]") as number[];
+    } catch {
+      return [];
+    }
+  });
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -555,14 +650,44 @@ export default function App() {
       (resource) => !liveKeys.has(`${resource.name.toLowerCase()}|${resource.geo.lat.toFixed(3)}|${resource.geo.lng.toFixed(3)}`),
     );
 
-    return [...liveResources, ...curatedWithoutDuplicates];
+    return curateResourcePool([...liveResources, ...curatedWithoutDuplicates]);
   }, [liveResources]);
+  const poolSize = Math.min(50, allResources.length);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60000);
 
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const handleBeforeInstall = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    const handleInstalled = () => {
+      setIsInstalledApp(true);
+      setInstallPrompt(null);
+    };
+    const handleDisplayChange = () => setIsInstalledApp(isStandaloneDisplay());
+    const displayQuery = window.matchMedia("(display-mode: standalone)");
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleInstalled);
+    displayQuery.addEventListener("change", handleDisplayChange);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleInstalled);
+      displayQuery.removeEventListener("change", handleDisplayChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isInstalledApp) {
+      window.localStorage.setItem("community-pantry-app-saved", JSON.stringify(savedResourceIds));
+    }
+  }, [isInstalledApp, savedResourceIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -576,7 +701,7 @@ export default function App() {
         setLiveResources(nextResources);
         setSourceStatus(
           nextResources.length
-            ? `Loaded ${nextResources.length} live GTA map listings from OpenStreetMap, plus curated entries. Open map data can be incomplete.`
+            ? `Loaded ${nextResources.length} live GTA map listings from OpenStreetMap and rank the best 50 with curated entries. Open map data can be incomplete.`
             : "No live map listings returned, so the curated GTA starter set is shown.",
         );
       })
@@ -621,8 +746,15 @@ export default function App() {
         }
 
         return scoreDelta;
-      });
+      })
+      .slice(0, 50);
   }, [allResources, effectiveNeeds, now, onlyOpen, query, userLocation]);
+  const topResources = rankedResources.slice(0, 5);
+  const listedResources = view === "all" ? rankedResources : topResources;
+  const triagePlan = useMemo(
+    () => buildTriagePlan(query, effectiveNeeds, rankedResources.slice(0, 5)),
+    [effectiveNeeds, query, rankedResources],
+  );
 
   const bestMatch = rankedResources[0]?.resource;
   const activeRouteResource = useMemo(
@@ -703,7 +835,7 @@ export default function App() {
       .bindPopup(`Starting point: ${userLocation.label}`)
       .addTo(markerLayerRef.current);
 
-    rankedResources.forEach(({ resource, calculatedDistanceKm }, index) => {
+    listedResources.forEach(({ resource, calculatedDistanceKm }, index) => {
       bounds.extend([resource.geo.lat, resource.geo.lng]);
 
       L.marker([resource.geo.lat, resource.geo.lng], {
@@ -724,7 +856,7 @@ export default function App() {
     });
 
     mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 11 });
-  }, [now, rankedResources, userLocation]);
+  }, [listedResources, now, userLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -800,6 +932,33 @@ export default function App() {
   function showRouteTo(resourceId: number) {
     setRouteResourceId(resourceId);
     setSelectedResourceId(null);
+  }
+
+  function toggleSavedResource(resourceId: number) {
+    if (!isInstalledApp) {
+      return;
+    }
+
+    setSavedResourceIds((current) =>
+      current.includes(resourceId)
+        ? current.filter((savedId) => savedId !== resourceId)
+        : [...current, resourceId],
+    );
+  }
+
+  async function promptInstallApp() {
+    if (!installPrompt) {
+      return;
+    }
+
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+
+    if (choice.outcome === "accepted") {
+      setIsInstalledApp(true);
+    }
+
+    setInstallPrompt(null);
   }
 
   async function handleLocationSearch(event: FormEvent<HTMLFormElement>) {
@@ -970,6 +1129,24 @@ export default function App() {
           </label>
         </section>
 
+        <section className="panel app-panel">
+          <div className="section-title compact">
+            <Download size={18} aria-hidden="true" />
+            <h2>{isInstalledApp ? "Installed app mode" : "Website mode"}</h2>
+          </div>
+          <p>
+            {isInstalledApp
+              ? "Local saves are available on this device."
+              : "Install the app to save resources locally on your computer."}
+          </p>
+          {!isInstalledApp && installPrompt && (
+            <button className="sidebar-action" onClick={promptInstallApp} type="button">
+              <Download size={16} aria-hidden="true" />
+              Install app
+            </button>
+          )}
+        </section>
+
         <section className="trust-strip" aria-label="Prize track alignment">
           <span>
             <Sparkles size={15} aria-hidden="true" />
@@ -981,7 +1158,7 @@ export default function App() {
           </span>
           <span>
             <ShieldCheck size={15} aria-hidden="true" />
-            Live map data
+            IBM-ready triage
           </span>
         </section>
       </aside>
@@ -990,14 +1167,45 @@ export default function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">From {userLocation.label}</p>
-            <h2>{rankedResources.length} matched support options</h2>
+            <h2>{poolSize} GTA choices ranked, top 5 shown</h2>
             <p className="time-readout">Open status checked at {formatClock(now)}</p>
             <p className="time-readout">Match score weighs needs, distance, open status, and text relevance.</p>
             <p className="time-readout">{sourceStatus}</p>
           </div>
+          <div className="view-actions" aria-label="Result views">
+            <button className={view === "match" ? "active" : ""} onClick={() => setView("match")} type="button">
+              <Sparkles size={16} aria-hidden="true" />
+              Top 5
+            </button>
+            <button className={view === "all" ? "active" : ""} onClick={() => setView("all")} type="button">
+              <List size={16} aria-hidden="true" />
+              View all 50
+            </button>
+          </div>
         </header>
 
         <div className="content-grid">
+          <section className="insight-panel" aria-label="IBM readiness features">
+            <div className="insight-card">
+              <BrainCircuit size={19} aria-hidden="true" />
+              <div>
+                <p className="eyebrow">watsonx-style eligibility extraction</p>
+                <h3>{triagePlan.urgency} urgency, {triagePlan.confidence}% confidence</h3>
+                <p>{triagePlan.summary}</p>
+              </div>
+            </div>
+            <div className="insight-card">
+              <Cloud size={19} aria-hidden="true" />
+              <div>
+                <p className="eyebrow">IBM Cloud API workflow</p>
+                <h3>{triagePlan.modelMode}</h3>
+                <p>
+                  {triagePlan.nextSteps.join(" ")}
+                </p>
+              </div>
+            </div>
+          </section>
+
           <section className="map-panel" aria-label="Resource map">
             <div className="map-header">
               <div>
@@ -1013,8 +1221,13 @@ export default function App() {
           </section>
 
           <section className="results" aria-label="Matched resources">
-            {rankedResources.map((match, index) => {
+            <div className="results-header">
+              <h3>{view === "all" ? "All ranked GTA resources" : "Top 5 matches"}</h3>
+              <span>{listedResources.length} shown from {poolSize}</span>
+            </div>
+            {listedResources.map((match, index) => {
               const { resource, score, calculatedDistanceKm, status } = match;
+              const isSaved = savedResourceIds.includes(resource.id);
 
               return (
               <article
@@ -1066,6 +1279,19 @@ export default function App() {
                     <Info size={16} aria-hidden="true" />
                     Contact info
                   </button>
+                  {isInstalledApp && (
+                    <button
+                      className={isSaved ? "saved" : ""}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleSavedResource(resource.id);
+                      }}
+                      type="button"
+                    >
+                      <Bookmark size={16} aria-hidden="true" />
+                      {isSaved ? "Saved" : "Save"}
+                    </button>
+                  )}
                 </div>
               </article>
               );
@@ -1163,6 +1389,16 @@ export default function App() {
               <MapPin size={16} aria-hidden="true" />
               Show route on map
             </button>
+            {isInstalledApp && (
+              <button
+                className={savedResourceIds.includes(selectedMatch.resource.id) ? "wide-action saved" : "wide-action"}
+                onClick={() => toggleSavedResource(selectedMatch.resource.id)}
+                type="button"
+              >
+                <Bookmark size={16} aria-hidden="true" />
+                {savedResourceIds.includes(selectedMatch.resource.id) ? "Saved locally" : "Save locally"}
+              </button>
+            )}
           </article>
         </section>
       )}

@@ -182,6 +182,22 @@ textarea:focus {
   font-weight: 900;
 }
 
+.sidebar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #f0c15f;
+  color: #17352d;
+  cursor: pointer;
+  font-weight: 900;
+}
+
 .location-actions button + button {
   background: rgba(255, 255, 255, 0.14);
   color: #f7f9ef;
@@ -306,6 +322,12 @@ textarea:focus {
   margin-top: 0;
 }
 
+.app-panel p {
+  color: #d7e6df;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 .trust-strip {
   display: grid;
   gap: 8px;
@@ -345,6 +367,33 @@ textarea:focus {
   margin-top: 4px;
   font-size: clamp(1.35rem, 2.5vw, 2.25rem);
   line-height: 1.05;
+}
+
+.view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  justify-content: flex-end;
+}
+
+.view-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 13px;
+  background: #e7efe6;
+  color: #194035;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.view-actions button.active {
+  background: #194035;
+  color: #fffdf4;
 }
 
 .time-readout {
@@ -388,6 +437,41 @@ textarea:focus {
   border-radius: 8px;
   background: #eaf0df;
   z-index: 0;
+}
+
+.insight-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.insight-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid #d9e4d8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fbf4;
+}
+
+.insight-card svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #2e6f5d;
+}
+
+.insight-card h3 {
+  margin-top: 4px;
+  font-size: 1rem;
+}
+
+.insight-card p:not(.eyebrow) {
+  margin-top: 5px;
+  color: #536257;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
 .leaflet-container {
@@ -450,6 +534,24 @@ textarea:focus {
 .results {
   display: grid;
   gap: 12px;
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  color: #33463b;
+}
+
+.results-header h3 {
+  font-size: 1rem;
+}
+
+.results-header span {
+  color: #607166;
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
 .resource-card {
@@ -602,6 +704,12 @@ textarea:focus {
   color: #194035;
 }
 
+.card-actions button.saved,
+.wide-action.saved {
+  background: #194035;
+  color: #fffdf4;
+}
+
 .details-backdrop {
   position: fixed;
   inset: 0;
@@ -715,7 +823,8 @@ textarea:focus {
 
 @media (max-width: 1040px) {
   .app-shell,
-  .content-grid {
+  .content-grid,
+  .insight-panel {
     grid-template-columns: 1fr;
   }
 

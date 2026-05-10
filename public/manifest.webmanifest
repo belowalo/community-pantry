@@ -1,0 +1,18 @@
+{
+  "name": "Community Pantry",
+  "short_name": "Pantry",
+  "description": "Find nearby GTA food support, routes, and locally saved resources.",
+  "start_url": "/community-pantry/",
+  "scope": "/community-pantry/",
+  "display": "standalone",
+  "background_color": "#f5f2e8",
+  "theme_color": "#194035",
+  "icons": [
+    {
+      "src": "/community-pantry/pantry-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
