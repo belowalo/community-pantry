@@ -199,6 +199,30 @@ textarea:focus {
   line-height: 1.4;
 }
 
+.detected-needs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: #d7e6df;
+  font-size: 0.8rem;
+}
+
+.detected-needs span {
+  font-weight: 900;
+}
+
+.detected-needs strong,
+.detected-needs em {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.13);
+  color: #f7f9ef;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .examples {
   display: grid;
   gap: 8px;
@@ -358,45 +382,51 @@ textarea:focus {
   overflow: hidden;
   min-height: 420px;
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(25, 64, 53, 0.08) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(25, 64, 53, 0.08) 1px, transparent 1px),
-    radial-gradient(circle at 63% 35%, rgba(240, 193, 95, 0.42), transparent 18%),
-    #eaf0df;
-  background-size:
-    44px 44px,
-    44px 44px,
-    auto,
-    auto;
+  background: #eaf0df;
+  z-index: 0;
 }
 
-.route-line {
-  position: absolute;
-  inset: 24% 20% 22% 24%;
-  border-top: 4px solid rgba(25, 64, 53, 0.28);
-  border-right: 4px solid rgba(25, 64, 53, 0.28);
-  transform: rotate(-11deg);
+.leaflet-container {
+  width: 100%;
+  height: 420px;
+  border-radius: 8px;
+  font-family: inherit;
 }
 
-.map-pin {
-  position: absolute;
+.leaflet-resource-marker,
+.leaflet-user-marker {
+  background: transparent;
+  border: 0;
+}
+
+.leaflet-resource-marker span,
+.leaflet-user-marker span {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  margin: -18px 0 0 -18px;
-  border: 2px solid #fffdf4;
+  width: 34px;
+  height: 34px;
+  border: 3px solid #fffdf4;
   border-radius: 50%;
   background: #2e6f5d;
   color: #fffdf4;
-  box-shadow: 0 10px 22px rgba(23, 33, 28, 0.2);
+  box-shadow: 0 10px 22px rgba(23, 33, 28, 0.24);
+  font-size: 0.82rem;
+  font-weight: 900;
 }
 
-.map-pin.primary {
-  width: 52px;
-  height: 52px;
-  margin: -26px 0 0 -26px;
+.leaflet-resource-marker.primary span {
   background: #d6503f;
+}
+
+.leaflet-user-marker span {
+  width: 26px;
+  height: 26px;
+  background: #17211c;
+  border-color: #f0c15f;
+}
+
+.leaflet-control-attribution {
+  font-size: 0.65rem;
 }
 
 .ai-note {

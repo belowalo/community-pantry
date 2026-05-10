@@ -7,13 +7,14 @@ import {
   LocateFixed,
   MapPin,
   MessageCircle,
-  Navigation,
   Search,
   ShieldCheck,
   Sparkles,
   Utensils,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { needOptions, Resource, resources } from "./data";
 
 type UserLocation = {
@@ -27,6 +28,28 @@ const examples = [
   "Student looking for halal groceries near Sheridan",
   "Family needs baby formula and delivery",
 ];
+
+const queryPatterns: Record<string, string[]> = {
+  groceries: ["grocery", "groceries", "food bank", "pantry", "staples", "canned"],
+  "hot-meal": ["hot meal", "meal", "dinner", "lunch", "soup", "eat today"],
+  urgent: ["today", "tonight", "now", "urgent", "emergency", "asap", "hungry"],
+  "no-id": ["no id", "without id", "lost id", "dont have id", "do not have id", "no documents"],
+  halal: ["halal", "muslim"],
+  vegetarian: ["vegetarian", "vegan", "plant based", "no meat"],
+  baby: ["baby", "infant", "formula", "diaper", "diapers"],
+  delivery: ["delivery", "deliver", "homebound", "can't travel", "cannot travel"],
+  student: ["student", "college", "campus", "sheridan", "university"],
+  family: ["family", "kids", "children", "child", "parent"],
+  newcomer: ["newcomer", "refugee", "immigrant", "settlement"],
+};
+
+function detectedNeedIds(query: string) {
+  const normalizedQuery = query.toLowerCase().replace(/[’']/g, "");
+
+  return Object.entries(queryPatterns)
+    .filter(([, patterns]) => patterns.some((pattern) => normalizedQuery.includes(pattern)))
+    .map(([id]) => id);
+}
 
 function distanceKm(from: UserLocation, to: Resource["geo"]) {
   const earthRadiusKm = 6371;
@@ -71,7 +94,7 @@ async function geocodeLocation(searchText: string): Promise<UserLocation> {
 
 function scoreResource(
   resource: Resource,
-  selectedNeeds: string[],
+  effectiveNeeds: string[],
   query: string,
   calculatedDistanceKm: number,
 ) {
@@ -89,7 +112,7 @@ function scoreResource(
     .join(" ")
     .toLowerCase();
 
-  const needScore = selectedNeeds.reduce(
+  const needScore = effectiveNeeds.reduce(
     (score, need) => score + (resource.tags.includes(need) ? 16 : -4),
     0,
   );
@@ -103,8 +126,8 @@ function scoreResource(
   return Math.round(needScore + queryScore + openScore + distanceScore);
 }
 
-function matchExplanation(resource: Resource, selectedNeeds: string[]) {
-  const matched = selectedNeeds
+function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
+  const matched = effectiveNeeds
     .filter((need) => resource.tags.includes(need))
     .map((need) => needOptions.find((option) => option.id === need)?.label)
     .filter(Boolean);
@@ -130,6 +153,15 @@ export default function App() {
   });
   const [locationStatus, setLocationStatus] = useState("Distances are calculated from this location.");
   const [isLocating, setIsLocating] = useState(false);
+  const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerLayerRef = useRef<L.LayerGroup | null>(null);
+
+  const detectedNeeds = useMemo(() => detectedNeedIds(query), [query]);
+  const effectiveNeeds = useMemo(
+    () => Array.from(new Set([...selectedNeeds, ...detectedNeeds])),
+    [detectedNeeds, selectedNeeds],
+  );
 
   const rankedResources = useMemo(() => {
     return resources
@@ -140,13 +172,79 @@ export default function App() {
         return {
           resource,
           calculatedDistanceKm,
-          score: scoreResource(resource, selectedNeeds, query, calculatedDistanceKm),
+          score: scoreResource(resource, effectiveNeeds, query, calculatedDistanceKm),
         };
       })
       .sort((a, b) => b.score - a.score || a.calculatedDistanceKm - b.calculatedDistanceKm);
-  }, [onlyOpen, query, selectedNeeds, userLocation]);
+  }, [effectiveNeeds, onlyOpen, query, userLocation]);
 
   const bestMatch = rankedResources[0]?.resource;
+
+  useEffect(() => {
+    if (!mapElementRef.current || mapRef.current) {
+      return;
+    }
+
+    mapRef.current = L.map(mapElementRef.current, {
+      center: [43.708, -79.47],
+      zoom: 9,
+      scrollWheelZoom: true,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    }).addTo(mapRef.current);
+
+    markerLayerRef.current = L.layerGroup().addTo(mapRef.current);
+
+    return () => {
+      mapRef.current?.remove();
+      mapRef.current = null;
+      markerLayerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !markerLayerRef.current) {
+      return;
+    }
+
+    markerLayerRef.current.clearLayers();
+
+    const bounds = L.latLngBounds([[userLocation.lat, userLocation.lng]]);
+    L.marker([userLocation.lat, userLocation.lng], {
+      icon: L.divIcon({
+        className: "leaflet-user-marker",
+        html: "<span></span>",
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      }),
+    })
+      .bindPopup(`Starting point: ${userLocation.label}`)
+      .addTo(markerLayerRef.current);
+
+    rankedResources.forEach(({ resource, calculatedDistanceKm }, index) => {
+      bounds.extend([resource.geo.lat, resource.geo.lng]);
+
+      L.marker([resource.geo.lat, resource.geo.lng], {
+        icon: L.divIcon({
+          className: index === 0 ? "leaflet-resource-marker primary" : "leaflet-resource-marker",
+          html: `<span>${index + 1}</span>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+      })
+        .bindPopup(
+          `<strong>${resource.name}</strong><br>${resource.city}<br>${calculatedDistanceKm.toFixed(
+            1,
+          )} km away`,
+        )
+        .addTo(markerLayerRef.current);
+    });
+
+    mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 11 });
+  }, [rankedResources, userLocation]);
 
   function toggleNeed(id: string) {
     setSelectedNeeds((current) =>
@@ -231,8 +329,20 @@ export default function App() {
             id="need-search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Tell us what you need, where you are, and any requirements."
+            placeholder="Example: I need halal groceries today and I do not have ID."
           />
+          <div className="detected-needs" aria-label="Detected needs from situation">
+            <span>Detected</span>
+            {detectedNeeds.length ? (
+              detectedNeeds.map((need) => (
+                <strong key={need}>
+                  {needOptions.find((option) => option.id === need)?.label ?? need}
+                </strong>
+              ))
+            ) : (
+              <em>Type a sentence to auto-detect needs</em>
+            )}
+          </div>
           <div className="examples" aria-label="Example searches">
             {examples.map((example) => (
               <button key={example} type="button" onClick={() => setQuery(example)}>
@@ -265,7 +375,7 @@ export default function App() {
               </button>
               <button disabled={isLocating} onClick={useBrowserLocation} type="button">
                 <LocateFixed size={16} aria-hidden="true" />
-                Use GPS
+                Use my location
               </button>
             </div>
           </form>
@@ -332,33 +442,16 @@ export default function App() {
           <section className="map-panel" aria-label="Resource map">
             <div className="map-header">
               <div>
-                <p className="eyebrow">Live match area</p>
+                <p className="eyebrow">GTA resource map</p>
                 <h3>{bestMatch ? bestMatch.name : "No matches yet"}</h3>
               </div>
-              <Navigation size={20} aria-hidden="true" />
             </div>
-            <div className="map-canvas">
-              <div className="route-line" />
-              {rankedResources.map(({ resource }, index) => (
-                <button
-                  aria-label={resource.name}
-                  className={index === 0 ? "map-pin primary" : "map-pin"}
-                  key={resource.id}
-                  style={{
-                    left: `${resource.coordinates.x}%`,
-                    top: `${resource.coordinates.y}%`,
-                  }}
-                  type="button"
-                >
-                  <MapPin size={index === 0 ? 24 : 18} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
+            <div className="map-canvas" ref={mapElementRef} />
             <div className="ai-note">
               <MessageCircle size={18} aria-hidden="true" />
               <p>
-                watsonx can turn plain-language requests into eligibility filters, urgency
-                signals, and next-step messages.
+                The sentence box now detects needs and changes ranking. watsonx can replace this
+                keyword parser with stronger natural-language eligibility extraction.
               </p>
             </div>
           </section>
@@ -382,7 +475,7 @@ export default function App() {
                   </div>
                   <strong>{Math.max(score, 0)}%</strong>
                 </div>
-                <p className="match-copy">{matchExplanation(resource, selectedNeeds)}</p>
+                <p className="match-copy">{matchExplanation(resource, effectiveNeeds)}</p>
                 <div className="detail-row">
                   <MapPin size={16} aria-hidden="true" />
                   <span>{resource.address}</span>

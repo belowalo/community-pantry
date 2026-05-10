@@ -15,14 +15,17 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
 ## MVP Features
 
 - Plain-language need search.
+- Sentence parsing that detects needs like halal, no ID, urgent, student,
+  family, delivery, and baby supplies from the Situation box.
 - Real distance calculation from a typed address, landmark, postal code, or
   browser GPS permission.
+- OpenStreetMap-powered GTA map with ranked resource markers.
 - Food support filters for urgent needs, dietary needs, no-ID access, students,
   families, baby supplies, and delivery.
 - Ranked nearby resources with open-now status, requirements, supplies, and
   contact actions.
-- Map-style visual matching surface for a polished demo.
-- Sample Brampton and Sheridan-area support data.
+- Expanded GTA seed directory across Brampton, Mississauga, Toronto, York, and
+  Durham.
 
 ## Run Locally
 
