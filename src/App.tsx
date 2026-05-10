@@ -32,6 +32,13 @@ type RankedResource = {
   score: number;
 };
 
+type RouteInfo = {
+  resourceId: number;
+  distanceKm: number;
+  durationMinutes: number;
+  coordinates: [number, number][];
+};
+
 const examples = [
   "I need food today and I do not have ID",
   "Student looking for halal groceries near Sheridan",
@@ -90,6 +97,38 @@ function directionsUrl(resource: Resource) {
 
 function resourceWebsiteLabel(url: string) {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
+async function fetchRoute(from: UserLocation, to: Resource): Promise<RouteInfo> {
+  const response = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.geo.lng},${to.geo.lat}?overview=full&geometries=geojson`,
+  );
+
+  if (!response.ok) {
+    throw new Error("Route service is unavailable right now.");
+  }
+
+  const payload = (await response.json()) as {
+    routes?: Array<{
+      distance: number;
+      duration: number;
+      geometry: {
+        coordinates: [number, number][];
+      };
+    }>;
+  };
+  const route = payload.routes?.[0];
+
+  if (!route) {
+    throw new Error("No route found for this destination.");
+  }
+
+  return {
+    resourceId: to.id,
+    distanceKm: route.distance / 1000,
+    durationMinutes: route.duration / 60,
+    coordinates: route.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+  };
 }
 
 function dayLabel(day: number) {
@@ -321,6 +360,9 @@ export default function App() {
   const [isLocating, setIsLocating] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [selectedResourceId, setSelectedResourceId] = useState<number | null>(null);
+  const [routeResourceId, setRouteResourceId] = useState<number | null>(null);
+  const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
+  const [routeStatus, setRouteStatus] = useState("Route shown for the top match.");
   const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
     try {
       return JSON.parse(window.localStorage.getItem("community-pantry-saved") ?? "[]") as number[];
@@ -331,6 +373,7 @@ export default function App() {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const routeLayerRef = useRef<L.Polyline | null>(null);
 
   const detectedNeeds = useMemo(() => detectedNeedIds(query), [query]);
   const effectiveNeeds = useMemo(
@@ -368,6 +411,12 @@ export default function App() {
   }, [effectiveNeeds, now, onlyOpen, query, userLocation]);
 
   const bestMatch = rankedResources[0]?.resource;
+  const activeRouteResource = useMemo(
+    () =>
+      resources.find((resource) => resource.id === (routeResourceId ?? bestMatch?.id)) ??
+      bestMatch,
+    [bestMatch, routeResourceId],
+  );
   const selectedMatch = useMemo(
     () =>
       rankedResources.find(({ resource }) => resource.id === selectedResourceId) ??
@@ -421,6 +470,7 @@ export default function App() {
       mapRef.current?.remove();
       mapRef.current = null;
       markerLayerRef.current = null;
+      routeLayerRef.current = null;
     };
   }, []);
 
@@ -466,6 +516,67 @@ export default function App() {
     mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 11 });
   }, [now, rankedResources, userLocation]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!activeRouteResource) {
+      setRouteInfo(null);
+      setRouteStatus("No destination selected.");
+      return;
+    }
+
+    setRouteStatus(`Finding route to ${activeRouteResource.name}...`);
+
+    fetchRoute(userLocation, activeRouteResource)
+      .then((route) => {
+        if (cancelled) {
+          return;
+        }
+
+        setRouteInfo(route);
+        setRouteStatus(
+          `Route to ${activeRouteResource.name}: ${route.distanceKm.toFixed(1)} km, about ${Math.round(
+            route.durationMinutes,
+          )} min driving.`,
+        );
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setRouteInfo(null);
+        setRouteStatus(error instanceof Error ? error.message : "Could not load a route.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRouteResource, userLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current) {
+      return;
+    }
+
+    if (routeLayerRef.current) {
+      routeLayerRef.current.remove();
+      routeLayerRef.current = null;
+    }
+
+    if (!routeInfo?.coordinates.length) {
+      return;
+    }
+
+    routeLayerRef.current = L.polyline(routeInfo.coordinates, {
+      color: "#d6503f",
+      opacity: 0.9,
+      weight: 5,
+    }).addTo(mapRef.current);
+
+    mapRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [38, 38], maxZoom: 13 });
+  }, [routeInfo]);
+
   function toggleNeed(id: string) {
     setSelectedNeeds((current) =>
       current.includes(id) ? current.filter((need) => need !== id) : [...current, id],
@@ -482,6 +593,11 @@ export default function App() {
 
   function openDetails(match: RankedResource) {
     setSelectedResourceId(match.resource.id);
+  }
+
+  function showRouteTo(resourceId: number) {
+    setRouteResourceId(resourceId);
+    setSelectedResourceId(null);
   }
 
   async function handleLocationSearch(event: FormEvent<HTMLFormElement>) {
@@ -686,6 +802,10 @@ export default function App() {
               </div>
             </div>
             <div className="map-canvas" ref={mapElementRef} />
+            <div className="route-summary">
+              <MapPin size={16} aria-hidden="true" />
+              <span>{routeStatus}</span>
+            </div>
           </section>
 
           <section className="results" aria-label="Matched resources">
@@ -816,7 +936,7 @@ export default function App() {
                 )}
                 <a href={directionsUrl(selectedMatch.resource)} rel="noreferrer" target="_blank">
                   <MapPin size={16} aria-hidden="true" />
-                  Directions
+                  Open in Google Maps
                 </a>
               </div>
             </div>
@@ -842,6 +962,15 @@ export default function App() {
                 ))}
               </div>
             </div>
+
+            <button
+              className="wide-action secondary"
+              onClick={() => showRouteTo(selectedMatch.resource.id)}
+              type="button"
+            >
+              <MapPin size={16} aria-hidden="true" />
+              Show route on map
+            </button>
 
             <button
               className={savedResourceIds.includes(selectedMatch.resource.id) ? "wide-action saved" : "wide-action"}

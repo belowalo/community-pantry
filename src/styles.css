@@ -433,6 +433,20 @@ textarea:focus {
   font-size: 0.65rem;
 }
 
+.route-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: #edf7f2;
+  color: #24463b;
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
 .results {
   display: grid;
   gap: 12px;
@@ -697,6 +711,12 @@ textarea:focus {
 .wide-action {
   width: 100%;
   margin-top: 18px;
+}
+
+.wide-action.secondary {
+  margin-top: 16px;
+  background: #e7efe6;
+  color: #194035;
 }
 
 @media (max-width: 1040px) {
