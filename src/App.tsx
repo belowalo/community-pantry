@@ -1,8 +1,6 @@
 import {
   Bookmark,
-  BrainCircuit,
   CheckCircle2,
-  Cloud,
   Clock3,
   Download,
   ExternalLink,
@@ -60,14 +58,6 @@ type AppView = "match" | "all";
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
-type TriagePlan = {
-  urgency: "Low" | "Medium" | "High";
-  confidence: number;
-  summary: string;
-  nextSteps: string[];
-  modelMode: "Local rules" | "watsonx ready";
 };
 
 const examples = [
@@ -232,7 +222,7 @@ function mapOverpassElement(element: OverpassElement): Resource | null {
 
   const type = resourceTypeFromTags(tags);
   const derivedTags = tagsFromOsm(type, tags);
-  const city = tags["addr:city"] || tags["addr:town"] || tags["addr:suburb"] || tags["is_in:city"] || "GTA";
+  const city = tags["addr:city"] || tags["addr:town"] || tags["addr:suburb"] || tags["is_in:city"] || "Canada";
   const address = compactAddress(tags) || city;
   const fallbackName = `${type === "Hot meal" ? "Hot meal" : "Food support"} in ${
     city
@@ -271,40 +261,71 @@ function mapOverpassElement(element: OverpassElement): Resource | null {
   };
 }
 
-async function fetchGtaOpenStreetMapResources() {
-  const gtaBoundingBox = "43.35,-80.1,44.15,-78.7";
-  const query = `
+function boundingBoxForRadius(center: UserLocation, radiusMeters: number) {
+  const latDelta = radiusMeters / 111320;
+  const lngDelta = radiusMeters / (111320 * Math.cos((center.lat * Math.PI) / 180));
+
+  return [
+    center.lat - latDelta,
+    center.lng - lngDelta,
+    center.lat + latDelta,
+    center.lng + lngDelta,
+  ]
+    .map((value) => value.toFixed(5))
+    .join(",");
+}
+
+async function fetchCanadianOpenStreetMapResources(center: UserLocation) {
+  const searchRadii = [50000, 150000, 300000, 750000];
+
+  for (const radius of searchRadii) {
+    const boundingBox = boundingBoxForRadius(center, radius);
+    const query = `
     [out:json][timeout:25];
     (
-      node["amenity"~"food_bank|soup_kitchen|community_fridge"](${gtaBoundingBox});
-      way["amenity"~"food_bank|soup_kitchen|community_fridge"](${gtaBoundingBox});
-      relation["amenity"~"food_bank|soup_kitchen|community_fridge"](${gtaBoundingBox});
-      node["social_facility"~"food_bank|soup_kitchen|food_distribution"](${gtaBoundingBox});
-      way["social_facility"~"food_bank|soup_kitchen|food_distribution"](${gtaBoundingBox});
-      relation["social_facility"~"food_bank|soup_kitchen|food_distribution"](${gtaBoundingBox});
-      node["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${gtaBoundingBox});
-      way["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${gtaBoundingBox});
-      relation["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${gtaBoundingBox});
+      node["amenity"~"food_bank|soup_kitchen|community_fridge"](${boundingBox});
+      way["amenity"~"food_bank|soup_kitchen|community_fridge"](${boundingBox});
+      relation["amenity"~"food_bank|soup_kitchen|community_fridge"](${boundingBox});
+      node["social_facility"~"food_bank|soup_kitchen|food_distribution"](${boundingBox});
+      way["social_facility"~"food_bank|soup_kitchen|food_distribution"](${boundingBox});
+      relation["social_facility"~"food_bank|soup_kitchen|food_distribution"](${boundingBox});
+      node["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${boundingBox});
+      way["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${boundingBox});
+      relation["social_facility:for"~"homeless|underprivileged|newcomer"]["amenity"="social_facility"](${boundingBox});
     );
     out center tags;
   `;
-  const response = await fetch("https://overpass-api.de/api/interpreter", {
-    body: `data=${encodeURIComponent(query)}`,
-    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-    method: "POST",
-  });
+    const response = await fetch("https://overpass-api.de/api/interpreter", {
+      body: `data=${encodeURIComponent(query)}`,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      method: "POST",
+    });
 
-  if (!response.ok) {
-    throw new Error("Could not load live GTA map data.");
+    if (!response.ok) {
+      continue;
+    }
+
+    const payload = (await response.json()) as { elements?: OverpassElement[] };
+    const results = curateResourcePool(
+      (payload.elements ?? [])
+        .filter((element) => {
+          const country = element.tags?.["addr:country"];
+
+          return !country || country.toUpperCase() === "CA";
+        })
+        .map(mapOverpassElement)
+        .filter((resource): resource is Resource => Boolean(resource)),
+    );
+
+    if (results.length >= 30 || radius === searchRadii[searchRadii.length - 1]) {
+      return { radiusKm: radius / 1000, resources: results };
+    }
   }
 
-  const payload = (await response.json()) as { elements?: OverpassElement[] };
-
-  return curateResourcePool(
-    (payload.elements ?? [])
-    .map(mapOverpassElement)
-      .filter((resource): resource is Resource => Boolean(resource)),
-  );
+  throw new Error("Could not load live Canadian map data.");
 }
 
 function resourceWebsiteLabel(url: string) {
@@ -434,20 +455,32 @@ async function geocodeLocation(searchText: string): Promise<UserLocation> {
   const cleanedSearch = searchText.trim().replace(/\s+/g, " ");
   const fallbackCities = [
     "",
-    "Ontario",
-    "Milton Ontario",
-    "Brampton Ontario",
-    "Mississauga Ontario",
-    "Toronto Ontario",
-    "Scarborough Ontario",
-    "Etobicoke Ontario",
-    "North York Ontario",
-    "Vaughan Ontario",
-    "Richmond Hill Ontario",
-    "Markham Ontario",
-    "Oakville Ontario",
-    "Burlington Ontario",
-    "Oshawa Ontario",
+    "Canada",
+    "Ontario Canada",
+    "Quebec Canada",
+    "British Columbia Canada",
+    "Alberta Canada",
+    "Manitoba Canada",
+    "Saskatchewan Canada",
+    "Nova Scotia Canada",
+    "New Brunswick Canada",
+    "Newfoundland and Labrador Canada",
+    "Prince Edward Island Canada",
+    "Yukon Canada",
+    "Northwest Territories Canada",
+    "Nunavut Canada",
+    "Toronto Canada",
+    "Montreal Canada",
+    "Vancouver Canada",
+    "Calgary Canada",
+    "Edmonton Canada",
+    "Ottawa Canada",
+    "Winnipeg Canada",
+    "Quebec City Canada",
+    "Halifax Canada",
+    "Saskatoon Canada",
+    "Regina Canada",
+    "St John's Canada",
   ];
   const streetWithoutNumber = cleanedSearch.replace(/^\d+\s+/, "");
   const queries = Array.from(
@@ -514,7 +547,7 @@ async function geocodeLocation(searchText: string): Promise<UserLocation> {
     }
   }
 
-  throw new Error("No GTA/Ontario match found. Try adding the city, for example: 516 Laking Terrace, Milton.");
+  throw new Error("No Canadian match found. Try adding the city and province, for example: 516 Laking Terrace, Milton, ON.");
 }
 
 function scoreResource(
@@ -566,36 +599,6 @@ function matchExplanation(resource: Resource, effectiveNeeds: string[]) {
   return `Matches ${matched.slice(0, 3).join(", ")}${matched.length > 3 ? " and more" : ""}.`;
 }
 
-function buildTriagePlan(query: string, effectiveNeeds: string[], topMatches: RankedResource[]): TriagePlan {
-  const urgentSignals = ["today", "tonight", "now", "urgent", "emergency", "hungry", "asap"];
-  const lowerQuery = query.toLowerCase();
-  const hasUrgency = urgentSignals.some((signal) => lowerQuery.includes(signal)) || effectiveNeeds.includes("urgent");
-  const hasBarrier = effectiveNeeds.some((need) => ["no-id", "delivery", "baby", "newcomer"].includes(need));
-  const nearbyOpen = topMatches.some((match) => match.status.isOpen && match.calculatedDistanceKm < 8);
-  const urgency: TriagePlan["urgency"] = hasUrgency && hasBarrier ? "High" : hasUrgency || hasBarrier ? "Medium" : "Low";
-  const firstMatch = topMatches[0];
-  const nextSteps = [
-    firstMatch
-      ? `Start with ${firstMatch.resource.name}, ${firstMatch.calculatedDistanceKm.toFixed(1)} km away.`
-      : "Set your location to rank nearby support.",
-    nearbyOpen ? "Prioritize an open-now option before checking broader matches." : "Call or check details before travelling.",
-    effectiveNeeds.includes("no-id") ? "Ask about no-ID intake before visiting." : "Bring ID if you have it, but confirm requirements first.",
-  ];
-
-  return {
-    urgency,
-    confidence: Math.min(96, 62 + effectiveNeeds.length * 7 + (query.trim() ? 12 : 0) + (firstMatch ? 8 : 0)),
-    summary:
-      urgency === "High"
-        ? "The situation sounds time-sensitive and has access barriers, so nearby open programs should be prioritized."
-        : urgency === "Medium"
-          ? "There are some constraints to account for, so the ranking favours closer and better-fit services."
-          : "The search is broad, so the ranking is mostly driven by distance and general food access fit.",
-    nextSteps,
-    modelMode: import.meta.env.VITE_WATSONX_ENDPOINT ? "watsonx ready" : "Local rules",
-  };
-}
-
 function isStandaloneDisplay() {
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.userAgent.includes("wv");
 }
@@ -619,8 +622,9 @@ export default function App() {
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [routeStatus, setRouteStatus] = useState("Route shown for the top match.");
   const [liveResources, setLiveResources] = useState<Resource[]>([]);
-  const [sourceStatus, setSourceStatus] = useState("Loading live GTA food support listings...");
+  const [sourceStatus, setSourceStatus] = useState("Searching for nearby food support in Canada...");
   const [view, setView] = useState<AppView>("match");
+  const [showDistanceInfo, setShowDistanceInfo] = useState(false);
   const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplay());
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
@@ -652,7 +656,7 @@ export default function App() {
 
     return curateResourcePool([...liveResources, ...curatedWithoutDuplicates]);
   }, [liveResources]);
-  const poolSize = Math.min(50, allResources.length);
+  const poolSize = Math.min(30, allResources.length);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60000);
@@ -692,8 +696,11 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchGtaOpenStreetMapResources()
-      .then((nextResources) => {
+    setSourceStatus(`Searching for nearby food support around ${userLocation.label}...`);
+    setLiveResources([]);
+
+    fetchCanadianOpenStreetMapResources(userLocation)
+      .then(({ radiusKm, resources: nextResources }) => {
         if (cancelled) {
           return;
         }
@@ -701,8 +708,8 @@ export default function App() {
         setLiveResources(nextResources);
         setSourceStatus(
           nextResources.length
-            ? `Loaded ${nextResources.length} live GTA map listings from OpenStreetMap and rank the best 50 with curated entries. Open map data can be incomplete.`
-            : "No live map listings returned, so the curated GTA starter set is shown.",
+            ? `Found ${nextResources.length} map listings within ${radiusKm} km. Showing the closest 30.`
+            : "No nearby map listings returned, so curated starter entries are shown as a fallback.",
         );
       })
       .catch(() => {
@@ -710,13 +717,13 @@ export default function App() {
           return;
         }
 
-        setSourceStatus("Live map data is unavailable right now, so the curated GTA starter set is shown.");
+        setSourceStatus("Live map data is unavailable right now, so curated starter entries are shown as a fallback.");
       });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userLocation]);
 
   const rankedResources = useMemo(() => {
     return allResources
@@ -739,22 +746,18 @@ export default function App() {
       })
       .filter(({ status }) => (onlyOpen ? status.isOpen : true))
       .sort((a, b) => {
-        const scoreDelta = b.score - a.score;
+        const distanceDelta = a.calculatedDistanceKm - b.calculatedDistanceKm;
 
-        if (Math.abs(scoreDelta) <= 8) {
-          return a.calculatedDistanceKm - b.calculatedDistanceKm;
+        if (Math.abs(distanceDelta) > 0.1) {
+          return distanceDelta;
         }
 
-        return scoreDelta;
+        return b.score - a.score;
       })
-      .slice(0, 50);
+      .slice(0, 30);
   }, [allResources, effectiveNeeds, now, onlyOpen, query, userLocation]);
   const topResources = rankedResources.slice(0, 5);
   const listedResources = view === "all" ? rankedResources : topResources;
-  const triagePlan = useMemo(
-    () => buildTriagePlan(query, effectiveNeeds, rankedResources.slice(0, 5)),
-    [effectiveNeeds, query, rankedResources],
-  );
 
   const bestMatch = rankedResources[0]?.resource;
   const activeRouteResource = useMemo(
@@ -1158,7 +1161,7 @@ export default function App() {
           </span>
           <span>
             <ShieldCheck size={15} aria-hidden="true" />
-            IBM-ready triage
+            Canada-wide search
           </span>
         </section>
       </aside>
@@ -1167,49 +1170,31 @@ export default function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">From {userLocation.label}</p>
-            <h2>{poolSize} GTA choices ranked, top 5 shown</h2>
+            <h2>{poolSize} closest choices, top 5 shown</h2>
             <p className="time-readout">Open status checked at {formatClock(now)}</p>
-            <p className="time-readout">Match score weighs needs, distance, open status, and text relevance.</p>
             <p className="time-readout">{sourceStatus}</p>
           </div>
           <div className="view-actions" aria-label="Result views">
+            <button onClick={() => setShowDistanceInfo(true)} type="button">
+              <Info size={16} aria-hidden="true" />
+              How distance works
+            </button>
             <button className={view === "match" ? "active" : ""} onClick={() => setView("match")} type="button">
               <Sparkles size={16} aria-hidden="true" />
               Top 5
             </button>
             <button className={view === "all" ? "active" : ""} onClick={() => setView("all")} type="button">
               <List size={16} aria-hidden="true" />
-              View all 50
+              View closest 30
             </button>
           </div>
         </header>
 
         <div className="content-grid">
-          <section className="insight-panel" aria-label="IBM readiness features">
-            <div className="insight-card">
-              <BrainCircuit size={19} aria-hidden="true" />
-              <div>
-                <p className="eyebrow">watsonx-style eligibility extraction</p>
-                <h3>{triagePlan.urgency} urgency, {triagePlan.confidence}% confidence</h3>
-                <p>{triagePlan.summary}</p>
-              </div>
-            </div>
-            <div className="insight-card">
-              <Cloud size={19} aria-hidden="true" />
-              <div>
-                <p className="eyebrow">IBM Cloud API workflow</p>
-                <h3>{triagePlan.modelMode}</h3>
-                <p>
-                  {triagePlan.nextSteps.join(" ")}
-                </p>
-              </div>
-            </div>
-          </section>
-
           <section className="map-panel" aria-label="Resource map">
             <div className="map-header">
               <div>
-                <p className="eyebrow">GTA resource map</p>
+                <p className="eyebrow">Nearby resource map</p>
                 <h3>{bestMatch ? bestMatch.name : "No matches yet"}</h3>
               </div>
             </div>
@@ -1222,7 +1207,7 @@ export default function App() {
 
           <section className="results" aria-label="Matched resources">
             <div className="results-header">
-              <h3>{view === "all" ? "All ranked GTA resources" : "Top 5 matches"}</h3>
+              <h3>{view === "all" ? "Closest 30 resources" : "Top 5 closest matches"}</h3>
               <span>{listedResources.length} shown from {poolSize}</span>
             </div>
             {listedResources.map((match, index) => {
@@ -1399,6 +1384,41 @@ export default function App() {
                 {savedResourceIds.includes(selectedMatch.resource.id) ? "Saved locally" : "Save locally"}
               </button>
             )}
+          </article>
+        </section>
+      )}
+      {showDistanceInfo && (
+        <section
+          aria-label="How distance is calculated"
+          className="details-backdrop compact-backdrop"
+          onClick={() => setShowDistanceInfo(false)}
+        >
+          <article className="info-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="details-header">
+              <div>
+                <span className="type-pill">Distance</span>
+                <h2>How distance works</h2>
+              </div>
+              <button
+                aria-label="Close distance explanation"
+                className="icon-button"
+                onClick={() => setShowDistanceInfo(false)}
+                type="button"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="details-section">
+              <p>
+                The app starts from the address you type or the browser location you allow, then compares that point
+                with each food support location on the map. It keeps the closest 30 nearby choices and shows the
+                closest 5 first.
+              </p>
+              <p>
+                The distance on each card is a straight-line estimate. The route line and Google Maps link can be
+                longer because roads, highways, and transit paths are not perfectly straight.
+              </p>
+            </div>
           </article>
         </section>
       )}

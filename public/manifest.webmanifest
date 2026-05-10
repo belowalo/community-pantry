@@ -1,7 +1,7 @@
 {
   "name": "Community Pantry",
   "short_name": "Pantry",
-  "description": "Find nearby GTA food support, routes, and locally saved resources.",
+  "description": "Find nearby Canadian food support, routes, and locally saved resources.",
   "start_url": "/community-pantry/",
   "scope": "/community-pantry/",
   "display": "standalone",
