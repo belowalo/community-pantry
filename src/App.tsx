@@ -1,13 +1,17 @@
 import {
+  Bookmark,
   CheckCircle2,
   Clock3,
+  ExternalLink,
   HeartHandshake,
+  Info,
   LocateFixed,
   MapPin,
   Search,
   ShieldCheck,
   Sparkles,
   Utensils,
+  X,
 } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -18,6 +22,13 @@ type UserLocation = {
   label: string;
   lat: number;
   lng: number;
+};
+
+type RankedResource = {
+  resource: Resource;
+  calculatedDistanceKm: number;
+  status: ReturnType<typeof serviceStatus>;
+  score: number;
 };
 
 const examples = [
@@ -64,6 +75,20 @@ function formatTime(time: string) {
 
 function formatClock(date: Date) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatPhoneHref(phone: string) {
+  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+}
+
+function directionsUrl(resource: Resource) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+    `${resource.address}, ${resource.city}`,
+  )}`;
+}
+
+function resourceWebsiteLabel(url: string) {
+  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
 function dayLabel(day: number) {
@@ -234,6 +259,14 @@ export default function App() {
   const [locationStatus, setLocationStatus] = useState("Distances are calculated from this location.");
   const [isLocating, setIsLocating] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [selectedResourceId, setSelectedResourceId] = useState<number | null>(null);
+  const [savedResourceIds, setSavedResourceIds] = useState<number[]>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem("community-pantry-saved") ?? "[]") as number[];
+    } catch {
+      return [];
+    }
+  });
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
@@ -274,6 +307,36 @@ export default function App() {
   }, [effectiveNeeds, now, onlyOpen, query, userLocation]);
 
   const bestMatch = rankedResources[0]?.resource;
+  const selectedMatch = useMemo(
+    () =>
+      rankedResources.find(({ resource }) => resource.id === selectedResourceId) ??
+      (selectedResourceId
+        ? resources
+            .map((resource) => {
+              const calculatedDistanceKm = distanceKm(userLocation, resource.geo);
+              const status = serviceStatus(resource, now);
+
+              return {
+                resource,
+                calculatedDistanceKm,
+                status,
+                score: scoreResource(
+                  resource,
+                  effectiveNeeds,
+                  query,
+                  calculatedDistanceKm,
+                  status.isOpen,
+                ),
+              };
+            })
+            .find(({ resource }) => resource.id === selectedResourceId)
+        : undefined),
+    [effectiveNeeds, now, query, rankedResources, selectedResourceId, userLocation],
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem("community-pantry-saved", JSON.stringify(savedResourceIds));
+  }, [savedResourceIds]);
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) {
@@ -335,6 +398,7 @@ export default function App() {
             1,
           )} km away<br>${serviceStatus(resource, now).label}`,
         )
+        .on("click", () => setSelectedResourceId(resource.id))
         .addTo(markerLayerRef.current);
     });
 
@@ -345,6 +409,18 @@ export default function App() {
     setSelectedNeeds((current) =>
       current.includes(id) ? current.filter((need) => need !== id) : [...current, id],
     );
+  }
+
+  function toggleSavedResource(resourceId: number) {
+    setSavedResourceIds((current) =>
+      current.includes(resourceId)
+        ? current.filter((savedId) => savedId !== resourceId)
+        : [...current, resourceId],
+    );
+  }
+
+  function openDetails(match: RankedResource) {
+    setSelectedResourceId(match.resource.id);
   }
 
   async function handleLocationSearch(event: FormEvent<HTMLFormElement>) {
@@ -507,7 +583,7 @@ export default function App() {
         <section className="trust-strip" aria-label="Prize track alignment">
           <span>
             <Sparkles size={15} aria-hidden="true" />
-            IBM watsonx-ready
+            Sentence matching
           </span>
           <span>
             <HeartHandshake size={15} aria-hidden="true" />
@@ -515,7 +591,7 @@ export default function App() {
           </span>
           <span>
             <ShieldCheck size={15} aria-hidden="true" />
-            Privacy-first
+            Local saves
           </span>
         </section>
       </aside>
@@ -541,8 +617,16 @@ export default function App() {
           </section>
 
           <section className="results" aria-label="Matched resources">
-            {rankedResources.map(({ resource, score, calculatedDistanceKm, status }, index) => (
-              <article className={index === 0 ? "resource-card featured" : "resource-card"} key={resource.id}>
+            {rankedResources.map((match, index) => {
+              const { resource, score, calculatedDistanceKm, status } = match;
+              const isSaved = savedResourceIds.includes(resource.id);
+
+              return (
+              <article
+                className={index === 0 ? "resource-card featured" : "resource-card"}
+                key={resource.id}
+                onClick={() => openDetails(match)}
+              >
                 <div className="resource-topline">
                   <span className="type-pill">{resource.type}</span>
                   <span className={status.isOpen ? "status open" : "status"}>
@@ -583,14 +667,121 @@ export default function App() {
                   ))}
                 </div>
                 <div className="card-actions">
-                  <a href={`tel:${resource.phone.replace(/\D/g, "")}`}>Call</a>
-                  <button type="button">Save</button>
+                  <button onClick={(event) => { event.stopPropagation(); openDetails(match); }} type="button">
+                    <Info size={16} aria-hidden="true" />
+                    Contact info
+                  </button>
+                  <button
+                    className={isSaved ? "saved" : ""}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleSavedResource(resource.id);
+                    }}
+                    type="button"
+                  >
+                    <Bookmark size={16} aria-hidden="true" />
+                    {isSaved ? "Saved" : "Save"}
+                  </button>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </section>
         </div>
       </section>
+      {selectedMatch && (
+        <section
+          aria-label={`${selectedMatch.resource.name} details`}
+          className="details-backdrop"
+          onClick={() => setSelectedResourceId(null)}
+        >
+          <article className="details-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="details-header">
+              <div>
+                <span className="type-pill">{selectedMatch.resource.type}</span>
+                <h2>{selectedMatch.resource.name}</h2>
+                <p>
+                  {selectedMatch.resource.city} - {selectedMatch.calculatedDistanceKm.toFixed(1)} km away
+                </p>
+              </div>
+              <button
+                aria-label="Close details"
+                className="icon-button"
+                onClick={() => setSelectedResourceId(null)}
+                type="button"
+              >
+                <X size={20} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="details-status">
+              <span className={selectedMatch.status.isOpen ? "status open" : "status"}>
+                <Clock3 size={14} aria-hidden="true" />
+                {selectedMatch.status.label}
+              </span>
+              <p>{selectedMatch.status.todayText}</p>
+            </div>
+
+            <div className="details-section">
+              <h3>Contact Info</h3>
+              <p>{selectedMatch.resource.contact.note}</p>
+              <div className="contact-actions">
+                {selectedMatch.resource.contact.phone && (
+                  <a href={formatPhoneHref(selectedMatch.resource.contact.phone)}>
+                    Call {selectedMatch.resource.contact.phone}
+                  </a>
+                )}
+                {selectedMatch.resource.contact.website && (
+                  <a href={selectedMatch.resource.contact.website} rel="noreferrer" target="_blank">
+                    <ExternalLink size={16} aria-hidden="true" />
+                    {resourceWebsiteLabel(selectedMatch.resource.contact.website)}
+                  </a>
+                )}
+                {selectedMatch.resource.contact.email && (
+                  <a href={`mailto:${selectedMatch.resource.contact.email}`}>
+                    {selectedMatch.resource.contact.email}
+                  </a>
+                )}
+                <a href={directionsUrl(selectedMatch.resource)} rel="noreferrer" target="_blank">
+                  <MapPin size={16} aria-hidden="true" />
+                  Directions
+                </a>
+              </div>
+            </div>
+
+            <div className="details-section">
+              <h3>Service Details</h3>
+              <div className="detail-row">
+                <MapPin size={16} aria-hidden="true" />
+                <span>{selectedMatch.resource.address}</span>
+              </div>
+              <div className="tag-row">
+                {selectedMatch.resource.supplies.map((supply) => (
+                  <span key={supply}>{supply}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="details-section">
+              <h3>Before You Go</h3>
+              <div className="requirements">
+                {selectedMatch.resource.requirements.map((requirement) => (
+                  <p key={requirement}>{requirement}</p>
+                ))}
+              </div>
+            </div>
+
+            <button
+              className={savedResourceIds.includes(selectedMatch.resource.id) ? "wide-action saved" : "wide-action"}
+              onClick={() => toggleSavedResource(selectedMatch.resource.id)}
+              type="button"
+            >
+              <Bookmark size={16} aria-hidden="true" />
+              {savedResourceIds.includes(selectedMatch.resource.id) ? "Saved locally" : "Save locally"}
+            </button>
+          </article>
+        </section>
+      )}
     </main>
   );
 }

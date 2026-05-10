@@ -9,8 +9,9 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
   SDG 11 Sustainable Cities.
 - Best Startup Potential: designed for schools, municipalities, and nonprofits
   that need smarter intake and referral tools.
-- Best Use of IBM Tech: ready for watsonx-powered natural language matching,
-  eligibility explanation, and notification copy.
+- Best Use of IBM Tech: the current MVP has a local sentence parser, and the
+  matching layer is structured so watsonx can replace that parser for stronger
+  eligibility extraction.
 
 ## MVP Features
 
@@ -21,6 +22,8 @@ Built for the IBM x UNSA Hackathon 2026 prize tracks:
   browser GPS permission.
 - Current-time open/closed status calculated from each resource's service
   windows.
+- Clickable resource details with contact info, directions, requirements, and
+  local saved resources.
 - OpenStreetMap-powered GTA map with ranked resource markers.
 - Food support filters for urgent needs, dietary needs, no-ID access, students,
   families, baby supplies, and delivery.

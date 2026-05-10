@@ -11,7 +11,12 @@ export type Resource = {
   neighborhood: string;
   city: string;
   address: string;
-  phone: string;
+  contact: {
+    phone?: string;
+    website?: string;
+    email?: string;
+    note: string;
+  };
   fallbackDistanceKm: number;
   tags: string[];
   requirements: string[];
@@ -37,7 +42,10 @@ export const resources: Resource[] = [
     neighborhood: "Sheridan Davis",
     city: "Brampton",
     address: "7899 McLaughlin Rd, Brampton",
-    phone: "Call 211 for current intake details",
+    contact: {
+      website: "https://www.sheridancollege.ca/student-life/student-services",
+      note: "Use Sheridan student services or campus support channels for current pantry access.",
+    },
     fallbackDistanceKm: 0.8,
     tags: ["student", "groceries", "no-id", "halal", "vegetarian"],
     requirements: ["Student-focused support", "Confirm campus access before visiting"],
@@ -53,7 +61,11 @@ export const resources: Resource[] = [
     neighborhood: "Downtown Brampton",
     city: "Brampton",
     address: "156 Main St N, Brampton",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "905-796-5888",
+      website: "https://regenbrampton.com/",
+      note: "Call or check the program website before visiting; hours and intake can change.",
+    },
     fallbackDistanceKm: 2.4,
     tags: ["hot-meal", "urgent", "no-id", "wheelchair", "vegetarian"],
     requirements: ["Walk-in services may be available", "Confirm service window before visiting"],
@@ -72,7 +84,11 @@ export const resources: Resource[] = [
     neighborhood: "East Mississauga",
     city: "Mississauga",
     address: "3121 Universal Dr, Mississauga",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "905-270-5589",
+      website: "https://www.foodbanksmississauga.ca/",
+      note: "Use their intake and locator tools to confirm the closest pickup option.",
+    },
     fallbackDistanceKm: 4.7,
     tags: ["groceries", "family", "delivery", "vegetarian", "newcomer"],
     requirements: ["Use local intake process", "Confirm closest pickup location"],
@@ -88,7 +104,11 @@ export const resources: Resource[] = [
     neighborhood: "Meadowvale",
     city: "Mississauga",
     address: "3185 Unity Dr, Mississauga",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "905-785-3651",
+      website: "https://edenffc.org/",
+      note: "Registration and appointment rules may apply; confirm before visiting.",
+    },
     fallbackDistanceKm: 7.8,
     tags: ["groceries", "family", "vegetarian", "newcomer"],
     requirements: ["Registration may be required", "Confirm eligibility before visiting"],
@@ -104,7 +124,11 @@ export const resources: Resource[] = [
     neighborhood: "Etobicoke",
     city: "Toronto",
     address: "191 New Toronto St, Toronto",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "416-203-0050",
+      website: "https://www.dailybread.ca/",
+      note: "Use Daily Bread's food bank locator for the best current member-agency match.",
+    },
     fallbackDistanceKm: 18.1,
     tags: ["groceries", "family", "delivery", "vegetarian", "no-id"],
     requirements: ["Use locator or call ahead", "Bring ID if available, but ask about no-ID options"],
@@ -120,7 +144,11 @@ export const resources: Resource[] = [
     neighborhood: "Trinity Bellwoods",
     city: "Toronto",
     address: "797 Dundas St W, Toronto",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "416-203-3011",
+      website: "https://fyfb.com/",
+      note: "Confirm drop-in and food bank hours before visiting.",
+    },
     fallbackDistanceKm: 25.5,
     tags: ["groceries", "hot-meal", "urgent", "no-id", "vegetarian"],
     requirements: ["Walk-in support may be available", "Confirm hours before visiting"],
@@ -139,7 +167,11 @@ export const resources: Resource[] = [
     neighborhood: "Amesbury",
     city: "Toronto",
     address: "116 Industry St, Toronto",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "416-635-7771",
+      website: "https://northyorkharvest.com/",
+      note: "Use their network information to confirm the correct agency and catchment area.",
+    },
     fallbackDistanceKm: 23.4,
     tags: ["groceries", "family", "newcomer", "vegetarian"],
     requirements: ["Use agency referral or call ahead", "Service area may apply"],
@@ -155,7 +187,10 @@ export const resources: Resource[] = [
     neighborhood: "Scarborough",
     city: "Toronto",
     address: "Scarborough, Toronto",
-    phone: "Call 211 for current intake details",
+    contact: {
+      website: "https://www.feedscarborough.ca/",
+      note: "Feed Scarborough operates multiple programs; check the site for the exact location.",
+    },
     fallbackDistanceKm: 42.2,
     tags: ["groceries", "family", "halal", "vegetarian", "newcomer"],
     requirements: ["Confirm nearest program location", "Service times vary by site"],
@@ -174,7 +209,11 @@ export const resources: Resource[] = [
     neighborhood: "Richmond Hill",
     city: "Richmond Hill",
     address: "55 Newkirk Rd, Richmond Hill",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "905-508-4761",
+      website: "https://richmondhillcommunityfoodbank.ca/",
+      note: "Confirm registration and pickup details before visiting.",
+    },
     fallbackDistanceKm: 36.9,
     tags: ["groceries", "family", "newcomer", "vegetarian"],
     requirements: ["Registration may be required", "Confirm catchment area"],
@@ -190,7 +229,11 @@ export const resources: Resource[] = [
     neighborhood: "Concord",
     city: "Vaughan",
     address: "71 Marycroft Ave, Vaughan",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "905-851-2333",
+      website: "https://vaughanfoodbank.ca/",
+      note: "Call ahead for current pickup process and service area details.",
+    },
     fallbackDistanceKm: 29.6,
     tags: ["groceries", "family", "vegetarian"],
     requirements: ["Call ahead for current pickup process", "Service area may apply"],
@@ -206,7 +249,11 @@ export const resources: Resource[] = [
     neighborhood: "Davenport",
     city: "Toronto",
     address: "1884 Davenport Rd, Toronto",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "416-652-7867",
+      website: "https://www.thestop.org/",
+      note: "Check current drop-in, meal, and food access program schedules.",
+    },
     fallbackDistanceKm: 27.5,
     tags: ["hot-meal", "urgent", "no-id", "vegetarian"],
     requirements: ["Drop-in programs may be available", "Confirm schedule before visiting"],
@@ -225,7 +272,11 @@ export const resources: Resource[] = [
     neighborhood: "Oshawa",
     city: "Durham Region",
     address: "371 Marwood Dr, Oshawa",
-    phone: "Call 211 for current intake details",
+    contact: {
+      phone: "905-571-3863",
+      website: "https://feedtheneedindurham.ca/",
+      note: "Use partner agency information to confirm the nearest Durham pickup site.",
+    },
     fallbackDistanceKm: 71.2,
     tags: ["groceries", "family", "delivery", "vegetarian"],
     requirements: ["Use partner agency intake", "Confirm nearest Durham pickup site"],
